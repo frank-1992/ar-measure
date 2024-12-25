@@ -30,6 +30,10 @@ class ARSceneController: UIViewController {
     /// A serial queue used to coordinate adding or removing nodes from the scene.
     let updateQueue = DispatchQueue(label: "com.example.apple-samplecode.arkitexample.serialSceneKitQueue")
 
+    private var canPlaceObject: Bool = false
+    private var startLocation: SCNVector3?
+    private var lineNode: SCNNode?
+    private var dashedLineNodes: [SCNNode] = []
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -139,9 +143,76 @@ class ARSceneController: UIViewController {
     
     @objc
     private func tapAction(_ gesture: UITapGestureRecognizer) {
+        let touchLocation = sceneView.center//gesture.location(in: sceneView)
+        guard canPlaceObject, let hitTestResult = self.sceneView.smartHitTest(touchLocation) else { return }
+        startLocation = SCNVector3(hitTestResult.worldTransform.translation)
         
+        guard let startLocation = startLocation else { return }
+        let initialEndLocation = startLocation
+        
+        // 创建虚线
+        dashedLineNodes = createDashedLine(from: startLocation, to: initialEndLocation, interval: 0.02, radius: 0.005, color: .systemPink)
+        for node in dashedLineNodes {
+            sceneView.scene.rootNode.addChildNode(node)
+        }
+    }
+    
+    // MARK: - 创建虚线起点
+    private func createDashedLine(from start: SCNVector3, to end: SCNVector3, interval: Float, radius: CGFloat, color: UIColor) -> [SCNNode] {
+        var nodes: [SCNNode] = []
+        let vector = SCNVector3(x: end.x - start.x, y: end.y - start.y, z: end.z - start.z)
+        let distance = sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z)
+
+        guard distance > 0 else {
+            // 一开始 起点和终点想通的话只绘制一个点 起始点
+            let sphere = SCNSphere(radius: radius)
+            sphere.firstMaterial?.diffuse.contents = color
+            let sphereNode = SCNNode(geometry: sphere)
+            sphereNode.position = start
+            nodes.append(sphereNode)
+            return nodes
+        }
+
+        let direction = vector.normalized()
+        var currentPosition = start
+
+        while (currentPosition - start).length() < distance {
+            let sphere = SCNSphere(radius: radius)
+            sphere.firstMaterial?.diffuse.contents = color
+            let sphereNode = SCNNode(geometry: sphere)
+            sphereNode.position = currentPosition
+            nodes.append(sphereNode)
+
+            // 按间隔更新位置
+            currentPosition.x += direction.x * interval
+            currentPosition.y += direction.y * interval
+            currentPosition.z += direction.z * interval
+        }
+
+        return nodes
     }
 
+    // MARK: -  camera 移动的时候动态更新虚线
+    private func updateDashedLine(to endLocation: SCNVector3) {
+        guard let startLocation = startLocation else { return }
+
+        // 1. 先清除旧虚线
+        clearDashedLine()
+
+        // 2. 创建新的虚线
+        dashedLineNodes = createDashedLine(from: startLocation, to: endLocation, interval: 0.02, radius: 0.005, color: .systemPink)
+        for node in dashedLineNodes {
+            sceneView.scene.rootNode.addChildNode(node)
+        }
+    }
+    
+    // MARK: - 清楚旧的虚线
+    private func clearDashedLine() {
+        for node in dashedLineNodes {
+            node.removeFromParentNode()
+        }
+        dashedLineNodes.removeAll()
+    }
 }
 
 extension ARSceneController: ARSCNViewDelegate {
@@ -149,37 +220,24 @@ extension ARSceneController: ARSCNViewDelegate {
         DispatchQueue.main.async {
             self.updateFocusSquare(isObjectVisible: false)
         }
+        
+        DispatchQueue.main.async {
+            let screenCenter = self.sceneView.screenCenter
+            guard let hitTestResult = self.sceneView.smartHitTest(screenCenter), !self.dashedLineNodes.isEmpty else { return }
+            let endLocation = SCNVector3(hitTestResult.worldTransform.translation)
+            self.updateDashedLine(to: endLocation)
+        }
     }
     
     func renderer(_ renderer: any SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
-//        guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
-//        if planeAnchor.alignment == .horizontal || planeAnchor.alignment == .vertical {
-//            print("找到平面了1")
-//            canPlaceObject = true
-//        }
-        
-//        DispatchQueue.main.async {
-//            guard self.placedObjectOnPlane == false else { return }
-//            let touchLocation = self.sceneView.screenCenter
-//            guard let hitTestResult = self.sceneView.smartHitTest(touchLocation) else { return }
-//            self.addFocusNodeWithPosition(hitTestResult.worldTransform.translation)
-//            self.placedObjectOnPlane = true
-//        }
+        guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
+        if planeAnchor.alignment == .horizontal || planeAnchor.alignment == .vertical {
+            print("找到平面了1")
+            canPlaceObject = true
+        }
     }
     
     func renderer(_ renderer: any SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
-//        guard let planeAnchor = anchor as? ARPlaneAnchor, placedObjectOnPlane else { return }
-//        if planeAnchor.alignment == .horizontal || planeAnchor.alignment == .vertical {
-////            print("找到平面了2")
-////            canPlaceObject = true
-//            DispatchQueue.main.async {
-//                let touchLocation = self.sceneView.screenCenter
-//                guard let hitTestResult = self.sceneView.smartHitTest(touchLocation) else { return }
-//                self.updateFocusNodeWithPosition(hitTestResult.worldTransform.translation)
-//            }
-//        }
-        
-        
     }
 }
 
@@ -239,26 +297,6 @@ extension ARSceneController: ARCoachingOverlayViewDelegate {
 
 
 extension ARSCNView {
-//    func smartHitTest(_ point: CGPoint) -> raycast? {
-//
-//        // Perform the hit test.
-//        let results = hitTest(point, types: [.existingPlaneUsingGeometry])
-//        
-//        // 1. Check for a result on an existing plane using geometry.
-//        if let existingPlaneUsingGeometryResult = results.first(where: { $0.type == .existingPlaneUsingGeometry }) {
-//            return existingPlaneUsingGeometryResult
-//        }
-//        
-//        // 2. Check for a result on an existing plane, assuming its dimensions are infinite.
-//        let infinitePlaneResults = hitTest(point, types: .existingPlaneUsingExtent)
-//        
-//        if let infinitePlaneResult = infinitePlaneResults.first {
-//            return infinitePlaneResult
-//        }
-//        
-//        // 3. As a final fallback, check for a result on estimated planes.
-//        return results.first(where: { $0.type == .estimatedHorizontalPlane })
-//    }
     func smartHitTest(_ point: CGPoint) -> ARRaycastResult? {
         // 1. Create a raycast query for existing plane geometry.
         if let query = raycastQuery(from: point, allowing: .existingPlaneGeometry, alignment: .any),
