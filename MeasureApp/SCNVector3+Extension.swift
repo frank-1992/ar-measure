@@ -34,9 +34,14 @@ extension SCNVector3 {
         )
     }
     
-    // 向量减法
+    /// 向量减法
     static func -(lhs: SCNVector3, rhs: SCNVector3) -> SCNVector3 {
         return SCNVector3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z)
+    }
+    
+    /// 计算两个 3D 点之间的距离
+    func distance(to vector: SCNVector3) -> Float {
+        return sqrt(pow(x - vector.x, 2) + pow(y - vector.y, 2) + pow(z - vector.z, 2))
     }
 }
 

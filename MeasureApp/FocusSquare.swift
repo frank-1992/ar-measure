@@ -46,7 +46,7 @@ class FocusSquare: SCNNode {
     static let size: Float = 0.20
     
     /// 动画持续时间
-    static let animationDuration = 0.7
+    static let animationDuration = 0.2
     
     /// 是否正在动画
     private var isAnimating = false
@@ -69,6 +69,8 @@ class FocusSquare: SCNNode {
     /// 用于管理方向更新的计数器
     private var counterToNextOrientationUpdate: Int = 0
     
+    public var centerNode = SCNNode()
+    
     // MARK: - Initialization
     
     override init() {
@@ -85,6 +87,14 @@ class FocusSquare: SCNNode {
         // 始终将聚焦框渲染在其他内容之上
         displayNodeHierarchyOnTop(true)
         
+        let sphere = SCNSphere(radius: 0.008)
+        sphere.firstMaterial?.diffuse.contents = UIColor.white
+        let sphereNode = SCNNode(geometry: sphere)
+        sphereNode.simdPosition = simd_float3(0, 0.005, 0)// 这个地方给个 y 值是因为要让指引框的中心球的位置在虚线球的上方，让虚线球是从中心球下方出来，而不是从中心球内部出来
+        sphereNode.renderingOrder = 1000;
+        centerNode = sphereNode
+        
+        addChildNode(sphereNode)
         addChildNode(positioningNode)
         
         // 初始状态显示为方形样式
@@ -151,8 +161,8 @@ class FocusSquare: SCNNode {
     
     /// 更新聚焦框的变换以与摄像头对齐
     private func updateTransform(for raycastResult: ARRaycastResult, camera: ARCamera?) {
-        // 使用最近的多个位置求平均值
-        recentFocusSquarePositions = Array(recentFocusSquarePositions.suffix(10))
+        // 使用最近的多个位置求平均值 为了速度快点 就先设置 3 吧
+        recentFocusSquarePositions = Array(recentFocusSquarePositions.suffix(3))
         
         // 移动到最近位置的平均值以减少抖动
         let average = recentFocusSquarePositions.reduce([0, 0, 0], { $0 + $1 }) / Float(recentFocusSquarePositions.count)
