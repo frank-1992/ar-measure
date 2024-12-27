@@ -11,7 +11,7 @@ import SceneKit
 
 enum DrawFunction {
     case line
-    case square
+    case polygon
 }
 
 class ARSceneController: UIViewController {
@@ -33,7 +33,7 @@ class ARSceneController: UIViewController {
     var focusSquare = FocusSquare()
 
     /// A serial queue used to coordinate adding or removing nodes from the scene.
-    let updateQueue = DispatchQueue(label: "com.example.apple-samplecode.arkitexample.serialSceneKitQueue")
+    let updateQueue = DispatchQueue(label: "com.wuyi.test.serialSceneKitQueue")
 
     private var isPlaneDetected: Bool = false
     
@@ -51,9 +51,10 @@ class ARSceneController: UIViewController {
             case .line:
                 // 测距离模式，结束绘制后，把直线的两头作为可吸附的 node
                 if !isDrawing {
+                    lineEndPoints.removeAll()
                     lineEndPoints.append(contentsOf: allSidePoints)
                 }
-            case .square:
+            case .polygon:
                 // 测面积模式，超过两条线段，则把第一个起始点作为可吸附的 node
                 guard allSidePoints.count >= 3, let firstPoint = allSidePoints.first else { return }
                 lineEndPoints.append(firstPoint)
@@ -64,12 +65,13 @@ class ARSceneController: UIViewController {
     private var finishedDashedLines: [[SCNNode]] = [] // 已完成的虚线集合
     private var lineEndPoints: [SCNVector3] = []
     
-    private var drawFunction: DrawFunction = .square
+    private var drawFunction: DrawFunction = .polygon
     
     
     
     // 是否已经吸附了，防止震动反馈多次
     private var isAdsorption: Bool = false
+    private var adsorptionPoint: SCNVector3?
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -180,21 +182,29 @@ class ARSceneController: UIViewController {
     
     @objc
     private func stopDrawing() {
+        finishPolygon()
+    }
+    
+    private func finishPolygon() {
+        lineEndPoints.removeAll()
+        allSidePoints.removeAll()
+        dashedLineNodes.removeAll()
+        resetFocusSquareCenter(focusSquare: focusSquare)
         finishDrawing()
     }
     
     @objc
     private func tapAction(_ gesture: UITapGestureRecognizer) {
         
-        if drawFunction == .square {
+        if drawFunction == .polygon {
             
             // 如果起始点和终点重合就停止绘制
-//            if let startNode = self.dashedLineNodes.first,
-//               let endNode = self.dashedLineNodes.last {
-//                
-//            }
-            // 开始新的虚线绘制
-            startDrawing()
+            if isAdsorption {
+                finishPolygon()
+            } else {
+                // 开始新的虚线绘制
+                startDrawing()
+            }
         } else {
             if isDrawing {
                 // 结束绘制虚线
@@ -217,13 +227,9 @@ class ARSceneController: UIViewController {
         if drawFunction == .line {
             clearDashedLine()
         }
-//        clearDashedLine()
         
         allSidePoints.append(startLocation)
         dashedLineNodes = createDashedLine(from: startLocation, to: initialEndLocation, interval: 0.01, radius: 0.002, color: .white)
-//        if let firstNode = dashedLineNodes.first {
-//            lineSidePoints.append(firstNode.position)
-//        }
         
         for node in dashedLineNodes {
             sceneView.scene.rootNode.addChildNode(node)
@@ -232,16 +238,20 @@ class ARSceneController: UIViewController {
 
     // 结束绘制虚线
     private func finishDrawing() {
+        isDrawing = false
         // 将当前虚线保存到已完成虚线集合
         finishedDashedLines.append(dashedLineNodes)
         
         // 结束点
         if let lastNode = dashedLineNodes.last {
             lineEndPoints.append(lastNode.position)
+            // 画多边形的时候需要把所有的点加进 allSidePoints 里进行筛选操作
+//            if drawFunction == .polygon {
+                allSidePoints.append(lastNode.position)
+//            }
         }
         
         dashedLineNodes = []
-        isDrawing = false
     }
     
     
@@ -304,31 +314,53 @@ class ARSceneController: UIViewController {
     
     
     private func checkSnapToLineEndpoints(centerPosition:SCNVector3, lineEndpoints: [SCNVector3]) {
-        let focusPosition = centerPosition//focusSquare.centerNode.worldPosition
+        let focusPosition = centerPosition
         
         // 吸附范围
         let snapRange: Float = 0.05// 5cm
         
-        for endpoint in lineEndpoints {
-            let distance = focusPosition.distance(to: endpoint)
-            if distance <= snapRange {
-                // 小于 5cm 自动吸附
-                snapToEndpoint(focusSquare: focusSquare, endpoint: endpoint)
-            } else {
-                // 大于 5cm 回到初始位置
-                resetFocusSquareCenter(focusSquare: focusSquare)
+        // 如果已经吸附了 那就只针对当前吸附的点去计算是不是大于 5cm
+        if isAdsorption {
+            if let endPoint = adsorptionPoint {
+                let distance = focusPosition.distance(to: endPoint)
+                if distance <= snapRange {
+                    // 小于 5cm 自动吸附
+                    snapToEndpoint(focusSquare: focusSquare, endpoint: endPoint)
+                    return
+                } else {
+                    // 大于 5cm 回到初始位置
+                    resetFocusSquareCenter(focusSquare: focusSquare)
+                }
+            }
+        } else {
+            for endPoint in lineEndpoints {
+                let distance = focusPosition.distance(to: endPoint)
+                if distance <= snapRange {
+                    // 小于 5cm 自动吸附
+                    snapToEndpoint(focusSquare: focusSquare, endpoint: endPoint)
+                    return
+                } else {
+                    // 大于 5cm 回到初始位置
+                    resetFocusSquareCenter(focusSquare: focusSquare)
+                }
             }
         }
+        
+        
     }
     
     private func snapToEndpoint(focusSquare: FocusSquare, endpoint: SCNVector3) {
         focusSquare.centerNode.worldPosition = endpoint
         if !isAdsorption {
+            adsorptionPoint = endpoint
             // 吸附到端点
             let impactFeedback = UIImpactFeedbackGenerator(style: .light)
             impactFeedback.impactOccurred()
             isAdsorption = true
-            updateDashedLine(to: endpoint)
+            // 如果是绘制多边形，吸附到断点会默认把虚线绘制过去
+            if drawFunction == .polygon {
+                updateDashedLine(to: endpoint)
+            }
         }
     }
     
@@ -338,6 +370,7 @@ class ARSceneController: UIViewController {
         if isAdsorption {
             // 直接设置位置为初始位置
             isAdsorption = false
+            adsorptionPoint = nil
         }
     }
 
@@ -350,7 +383,10 @@ extension ARSceneController: ARSCNViewDelegate {
             if !self.lineEndPoints.isEmpty {
                 let screenCenter = self.sceneView.screenCenter
                 guard let hitTestResult = self.sceneView.smartHitTest(screenCenter) else { return }
-                self.checkSnapToLineEndpoints(centerPosition: SCNVector3(hitTestResult.worldTransform.translation), lineEndpoints: self.lineEndPoints)
+                // 超过两个点（也就是有一条线了）才允许检查吸附
+                if self.allSidePoints.count >= 2 {
+                    self.checkSnapToLineEndpoints(centerPosition: SCNVector3(hitTestResult.worldTransform.translation), lineEndpoints: self.lineEndPoints)
+                }
             }
         }
         
