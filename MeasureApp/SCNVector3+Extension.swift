@@ -35,8 +35,20 @@ extension SCNVector3 {
     }
     
     /// 向量减法
-    public static func -(lhs: SCNVector3, rhs: SCNVector3) -> SCNVector3 {
-        return SCNVector3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z)
+    static func +(left: SCNVector3, right: SCNVector3) -> SCNVector3 {
+        return SCNVector3(left.x + right.x, left.y + right.y, left.z + right.z)
+    }
+    
+    static func -(left: SCNVector3, right: SCNVector3) -> SCNVector3 {
+        return SCNVector3(left.x - right.x, left.y - right.y, left.z - right.z)
+    }
+    
+    static func *(vector: SCNVector3, scalar: Float) -> SCNVector3 {
+        return SCNVector3(vector.x * scalar, vector.y * scalar, vector.z * scalar)
+    }
+    
+    static func /(vector: SCNVector3, scalar: Float) -> SCNVector3 {
+        return SCNVector3(vector.x / scalar, vector.y / scalar, vector.z / scalar)
     }
     
     /// 计算两个 3D 点之间的距离
@@ -52,4 +64,37 @@ extension SCNVector3 {
         return !(lhs == rhs)
     }
 }
+
+
+import UIKit
+
+extension UIColor {
+    convenience init(hex: String) {
+        let defaultColor: UIColor = .white
+        var hexString = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if hexString.hasPrefix("#") {
+            hexString.removeFirst()
+        }
+        
+        guard hexString.count == 6 || hexString.count == 8 else {
+            self.init(cgColor: defaultColor.cgColor)
+            return
+        }
+        
+        let scanner = Scanner(string: hexString)
+        var hexNumber: UInt64 = 0
+        guard scanner.scanHexInt64(&hexNumber) else {
+            self.init(cgColor: defaultColor.cgColor)
+            return
+        }
+        
+        let r = CGFloat((hexNumber & 0xFF000000) >> 24) / 255.0
+        let g = CGFloat((hexNumber & 0x00FF0000) >> 16) / 255.0
+        let b = CGFloat((hexNumber & 0x0000FF00) >> 8) / 255.0
+        let a = hexString.count == 8 ? CGFloat(hexNumber & 0x000000FF) / 255.0 : 1.0
+        
+        self.init(red: r, green: g, blue: b, alpha: a)
+    }
+}
+
 

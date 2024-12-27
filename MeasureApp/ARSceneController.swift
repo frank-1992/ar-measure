@@ -42,6 +42,7 @@ class ARSceneController: UIViewController {
     private var isDrawing = false
     private var startLocation: SCNVector3? // 起点
     private var dashedLineNodes: [SCNNode] = [] // 当前绘制的虚线点
+    private var previousDashedLineNodes: [SCNNode] = [] // 前一个绘制的虚线点
     
     // 1. 每个线段的起始点位置（测面积）
     // 2. 每个线段的起始点和终点位置（测距离）
@@ -65,7 +66,7 @@ class ARSceneController: UIViewController {
     private var finishedDashedLines: [[SCNNode]] = [] // 已完成的虚线集合
     private var lineEndPoints: [SCNVector3] = []
     
-    private var drawFunction: DrawFunction = .polygon
+    private var drawFunction: DrawFunction = .line
     
     
     
@@ -186,11 +187,10 @@ class ARSceneController: UIViewController {
     }
     
     private func finishPolygon() {
+        finishDrawing()
         lineEndPoints.removeAll()
         allSidePoints.removeAll()
-        dashedLineNodes.removeAll()
         resetFocusSquareCenter(focusSquare: focusSquare)
-        finishDrawing()
     }
     
     @objc
@@ -221,18 +221,49 @@ class ARSceneController: UIViewController {
         guard let hitTestResult = sceneView.smartHitTest(sceneView.center) else { return }
         startLocation = SCNVector3(hitTestResult.worldTransform.translation)
         
-        guard let startLocation = startLocation else { return }
-        let initialEndLocation = startLocation
+        guard var startLocation = startLocation else { return }
+        var initialEndLocation = startLocation
 
-        if drawFunction == .line {
-            clearDashedLine()
+        // 如果是吸附状态的话 用最后一个点当做起点
+        if isAdsorption {
+            if let lastPosition = allSidePoints.last {
+                startLocation = lastPosition
+                initialEndLocation = startLocation
+            }
         }
         
+//        if drawFunction == .line {
+//            clearDashedLine()
+//        }
+        
+        // 所有节点位置的集合
         allSidePoints.append(startLocation)
         dashedLineNodes = createDashedLine(from: startLocation, to: initialEndLocation, interval: 0.01, radius: 0.002, color: .white)
+//        previousDashedLineNodes = dashedLineNodes
         
         for node in dashedLineNodes {
             sceneView.scene.rootNode.addChildNode(node)
+        }
+        
+        if drawFunction == .polygon {
+            if allSidePoints.count >= 2 {
+                let lastPoint = allSidePoints[allSidePoints.count - 1]
+                let previousPoint = allSidePoints[allSidePoints.count - 2]
+                
+//                clearDashedLine()
+                for node in previousDashedLineNodes {
+                    node.removeFromParentNode()
+                }
+                previousDashedLineNodes.removeAll()
+                
+                let lineNode = createLineBetween(
+                    point1: previousPoint,
+                    point2: lastPoint,
+                    color: .systemGreen,
+                    thickness: 0.004 // 默认的线宽
+                )
+                sceneView.scene.rootNode.addChildNode(lineNode)
+            }
         }
     }
 
@@ -245,13 +276,27 @@ class ARSceneController: UIViewController {
         // 结束点
         if let lastNode = dashedLineNodes.last {
             lineEndPoints.append(lastNode.position)
-            // 画多边形的时候需要把所有的点加进 allSidePoints 里进行筛选操作
-//            if drawFunction == .polygon {
-                allSidePoints.append(lastNode.position)
-//            }
+            // 把所有的点加进 allSidePoints 里进行筛选操作
+            allSidePoints.append(lastNode.position)
         }
         
-        dashedLineNodes = []
+        // 如果 allSidePoints.count 大于等于 2 ,那么最后一个点 n 和前一个点 n-1,绘制成直线
+        if allSidePoints.count >= 2 {
+            let lastPoint = allSidePoints[allSidePoints.count - 1]
+            let previousPoint = allSidePoints[allSidePoints.count - 2]
+            
+            clearDashedLine()
+            
+            let lineNode = createLineBetween(
+                point1: previousPoint,
+                point2: lastPoint,
+                color: .systemGreen,
+                thickness: 0.004 // 默认的线宽
+            )
+            sceneView.scene.rootNode.addChildNode(lineNode)
+        }
+        
+//        dashedLineNodes = []
     }
     
     
@@ -302,6 +347,7 @@ class ARSceneController: UIViewController {
         for node in dashedLineNodes {
             sceneView.scene.rootNode.addChildNode(node)
         }
+        previousDashedLineNodes = dashedLineNodes
     }
     
     // MARK: - 清楚旧的虚线
@@ -373,6 +419,49 @@ class ARSceneController: UIViewController {
             adsorptionPoint = nil
         }
     }
+    
+    // MARK: - 创建实线
+    private func createLineBetween(point1: SCNVector3, point2: SCNVector3, color: UIColor, thickness: CGFloat) -> SCNNode {
+        // 计算两点之间的向量
+        let vector = point2 - point1
+        let distance = vector.length()
+        
+        // 创建圆柱体表示直线
+        let cylinder = SCNCylinder(radius: thickness / 2, height: CGFloat(distance))
+        cylinder.firstMaterial?.diffuse.contents = color
+        
+        // 创建圆柱体节点
+        let cylinderNode = SCNNode(geometry: cylinder)
+        
+        // 设置圆柱体的中心位置
+        cylinderNode.position = (point1 + point2) / 2
+        
+        // 计算圆柱体的朝向
+        cylinderNode.look(at: point2, up: sceneView.scene.rootNode.worldUp, localFront: SCNVector3(0, 1, 0))
+        
+        // 创建线段的父节点
+        let lineNode = SCNNode()
+        lineNode.addChildNode(cylinderNode)
+        
+        // 创建起点和终点球体
+        let sphere1 = SCNSphere(radius: thickness * 1.5)
+        sphere1.firstMaterial?.diffuse.contents = UIColor.white // 起点颜色
+        let sphereNode1 = SCNNode(geometry: sphere1)
+        sphereNode1.position = point1
+        lineNode.addChildNode(sphereNode1)
+
+        
+        if !(drawFunction == .polygon && isAdsorption) {
+            let sphere2 = SCNSphere(radius: thickness * 1.5)
+            sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
+            let sphereNode2 = SCNNode(geometry: sphere2)
+            sphereNode2.position = point2
+            lineNode.addChildNode(sphereNode2)
+        }
+        
+        return lineNode
+    }
+
 
 }
 
