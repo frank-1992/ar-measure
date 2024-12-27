@@ -9,7 +9,7 @@ import UIKit
 import ARKit
 import SceneKit
 
-enum DrawFunction {
+enum DrawMode {
     case line
     case polygon
 }
@@ -48,7 +48,7 @@ class ARSceneController: UIViewController {
     // 2. 每个线段的起始点和终点位置（测距离）
     private var allSidePoints: [SCNVector3] = [] {
         didSet {
-            switch drawFunction {
+            switch drawMode {
             case .line:
                 // 测距离模式，结束绘制后，把直线的两头作为可吸附的 node
                 if !isDrawing {
@@ -66,18 +66,21 @@ class ARSceneController: UIViewController {
     private var finishedDashedLines: [[SCNNode]] = [] // 已完成的虚线集合
     private var lineEndPoints: [SCNVector3] = []
     
-    private var drawFunction: DrawFunction = .line
-    
+    private var drawMode: DrawMode = .line
     
     
     // 是否已经吸附了，防止震动反馈多次
     private var isAdsorption: Bool = false
-    private var adsorptionPoint: SCNVector3?
+    private var adsorptionPoint: SCNVector3? //当前动态判断的吸附点坐标 超过距离就为 nil
+    private var startAdsorptionLocation: SCNVector3? // 从吸附点绘制的起点
+    private var endAdsorptionLocation: SCNVector3? // 绘制过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
+    private var allLineNodes: [SCNNode] = []
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
         button.backgroundColor = UIColor.systemPink;
-        button.addTarget(self, action: #selector(stopDrawing), for: .touchUpInside)
+        button.addTarget(self, action: #selector(changeMode(sender:)), for: .touchUpInside)
+        button.setTitle("line", for: .normal)
         return button
     }()
 
@@ -182,8 +185,26 @@ class ARSceneController: UIViewController {
     }
     
     @objc
-    private func stopDrawing() {
-        finishPolygon()
+    private func changeMode(sender: UIButton) {
+        if drawMode == .line {
+            drawMode = .polygon
+            sender.setTitle("polygon", for: .normal)
+        } else {
+            drawMode = .line
+            sender.setTitle("line", for: .normal)
+        }
+        
+        if isDrawing {
+            finishDrawing()
+        }
+        
+        for lineNode in allLineNodes {
+            lineNode.removeFromParentNode()
+        }
+        allLineNodes.removeAll()
+        lineEndPoints.removeAll()
+        allSidePoints.removeAll()
+        resetFocusSquareCenter(focusSquare: focusSquare)
     }
     
     private func finishPolygon() {
@@ -196,7 +217,7 @@ class ARSceneController: UIViewController {
     @objc
     private func tapAction(_ gesture: UITapGestureRecognizer) {
         
-        if drawFunction == .polygon {
+        if drawMode == .polygon {
             
             // 如果起始点和终点重合就停止绘制
             if isAdsorption {
@@ -226,31 +247,26 @@ class ARSceneController: UIViewController {
 
         // 如果是吸附状态的话 用最后一个点当做起点
         if isAdsorption {
-            if let lastPosition = allSidePoints.last {
+            if let lastPosition = adsorptionPoint {
                 startLocation = lastPosition
                 initialEndLocation = startLocation
+                startAdsorptionLocation = lastPosition
             }
         }
-        
-//        if drawFunction == .line {
-//            clearDashedLine()
-//        }
         
         // 所有节点位置的集合
         allSidePoints.append(startLocation)
         dashedLineNodes = createDashedLine(from: startLocation, to: initialEndLocation, interval: 0.01, radius: 0.002, color: .white)
-//        previousDashedLineNodes = dashedLineNodes
         
         for node in dashedLineNodes {
             sceneView.scene.rootNode.addChildNode(node)
         }
         
-        if drawFunction == .polygon {
+        if drawMode == .polygon {
             if allSidePoints.count >= 2 {
                 let lastPoint = allSidePoints[allSidePoints.count - 1]
                 let previousPoint = allSidePoints[allSidePoints.count - 2]
                 
-//                clearDashedLine()
                 for node in previousDashedLineNodes {
                     node.removeFromParentNode()
                 }
@@ -262,6 +278,7 @@ class ARSceneController: UIViewController {
                     color: .systemGreen,
                     thickness: 0.004 // 默认的线宽
                 )
+                allLineNodes.append(lineNode)
                 sceneView.scene.rootNode.addChildNode(lineNode)
             }
         }
@@ -282,21 +299,58 @@ class ARSceneController: UIViewController {
         
         // 如果 allSidePoints.count 大于等于 2 ,那么最后一个点 n 和前一个点 n-1,绘制成直线
         if allSidePoints.count >= 2 {
-            let lastPoint = allSidePoints[allSidePoints.count - 1]
-            let previousPoint = allSidePoints[allSidePoints.count - 2]
-            
-            clearDashedLine()
-            
-            let lineNode = createLineBetween(
-                point1: previousPoint,
-                point2: lastPoint,
-                color: .systemGreen,
-                thickness: 0.004 // 默认的线宽
-            )
-            sceneView.scene.rootNode.addChildNode(lineNode)
+            switch drawMode {
+            case .line:
+                if let previousPoint = startAdsorptionLocation {
+                    var lastPoint = allSidePoints[allSidePoints.count - 1]
+                    // 如果结束画线的终点是在吸附点上就赋值吸附点的位置
+                    if let endAdsorptionLocation = endAdsorptionLocation {
+                        lastPoint = endAdsorptionLocation
+                    }
+                    clearDashedLine()
+                    
+                    let lineNode = createLineBetween(
+                        point1: previousPoint,
+                        point2: lastPoint,
+                        color: .systemGreen,
+                        thickness: 0.004
+                    )
+                    allLineNodes.append(lineNode)
+                    sceneView.scene.rootNode.addChildNode(lineNode)
+                    
+                    startAdsorptionLocation = nil
+                    endAdsorptionLocation = nil
+                } else {
+                    let lastPoint = allSidePoints[allSidePoints.count - 1]
+                    let previousPoint = allSidePoints[allSidePoints.count - 2]
+                    clearDashedLine()
+                    
+                    let lineNode = createLineBetween(
+                        point1: previousPoint,
+                        point2: lastPoint,
+                        color: .systemGreen,
+                        thickness: 0.004
+                    )
+                    allLineNodes.append(lineNode)
+                    sceneView.scene.rootNode.addChildNode(lineNode)
+                }
+                
+            case .polygon:
+                let lastPoint = allSidePoints[allSidePoints.count - 1]
+                let previousPoint = allSidePoints[allSidePoints.count - 2]
+                
+                clearDashedLine()
+                
+                let lineNode = createLineBetween(
+                    point1: previousPoint,
+                    point2: lastPoint,
+                    color: .systemGreen,
+                    thickness: 0.004
+                )
+                allLineNodes.append(lineNode)
+                sceneView.scene.rootNode.addChildNode(lineNode)
+            }
         }
-        
-//        dashedLineNodes = []
     }
     
     
@@ -337,8 +391,13 @@ class ARSceneController: UIViewController {
 
     // MARK: -  camera 移动的时候动态更新虚线
     private func updateDashedLine(to endLocation: SCNVector3) {
-        guard let startLocation = startLocation else { return }
-
+        guard var startLocation = startLocation else { return }
+        
+        // 如果是从吸附点开始绘制的 那么更新的时候虚线起点也是吸附点
+        if let startAdsorptionLocation = startAdsorptionLocation {
+            startLocation = startAdsorptionLocation
+        }
+        
         // 1. 先清除旧虚线
         clearDashedLine()
 
@@ -372,10 +431,12 @@ class ARSceneController: UIViewController {
                 if distance <= snapRange {
                     // 小于 5cm 自动吸附
                     snapToEndpoint(focusSquare: focusSquare, endpoint: endPoint)
+//                    currentAdsorptionLocation = endPoint
                     return
                 } else {
                     // 大于 5cm 回到初始位置
                     resetFocusSquareCenter(focusSquare: focusSquare)
+//                    currentAdsorptionLocation = nil
                 }
             }
         } else {
@@ -384,10 +445,13 @@ class ARSceneController: UIViewController {
                 if distance <= snapRange {
                     // 小于 5cm 自动吸附
                     snapToEndpoint(focusSquare: focusSquare, endpoint: endPoint)
+//                    currentAdsorptionLocation = endPoint
+                    
                     return
                 } else {
                     // 大于 5cm 回到初始位置
                     resetFocusSquareCenter(focusSquare: focusSquare)
+//                    currentAdsorptionLocation = nil
                 }
             }
         }
@@ -397,6 +461,7 @@ class ARSceneController: UIViewController {
     
     private func snapToEndpoint(focusSquare: FocusSquare, endpoint: SCNVector3) {
         focusSquare.centerNode.worldPosition = endpoint
+
         if !isAdsorption {
             adsorptionPoint = endpoint
             // 吸附到端点
@@ -404,7 +469,12 @@ class ARSceneController: UIViewController {
             impactFeedback.impactOccurred()
             isAdsorption = true
             // 如果是绘制多边形，吸附到断点会默认把虚线绘制过去
-            if drawFunction == .polygon {
+            
+            if isDrawing {
+                if drawMode == .line {
+                    // 绘制线过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
+                    endAdsorptionLocation = endpoint
+                }
                 updateDashedLine(to: endpoint)
             }
         }
@@ -417,6 +487,7 @@ class ARSceneController: UIViewController {
             // 直接设置位置为初始位置
             isAdsorption = false
             adsorptionPoint = nil
+            endAdsorptionLocation = nil
         }
     }
     
@@ -451,12 +522,23 @@ class ARSceneController: UIViewController {
         lineNode.addChildNode(sphereNode1)
 
         
-        if !(drawFunction == .polygon && isAdsorption) {
-            let sphere2 = SCNSphere(radius: thickness * 1.5)
-            sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
-            let sphereNode2 = SCNNode(geometry: sphere2)
-            sphereNode2.position = point2
-            lineNode.addChildNode(sphereNode2)
+        switch drawMode {
+        case .line:
+            if endAdsorptionLocation == nil {
+                let sphere2 = SCNSphere(radius: thickness * 1.5)
+                sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
+                let sphereNode2 = SCNNode(geometry: sphere2)
+                sphereNode2.position = point2
+                lineNode.addChildNode(sphereNode2)
+            }
+        case .polygon:
+            if !isAdsorption {
+                let sphere2 = SCNSphere(radius: thickness * 1.5)
+                sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
+                let sphereNode2 = SCNNode(geometry: sphere2)
+                sphereNode2.position = point2
+                lineNode.addChildNode(sphereNode2)
+            }
         }
         
         return lineNode
