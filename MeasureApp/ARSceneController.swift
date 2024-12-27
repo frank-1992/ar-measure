@@ -35,17 +35,41 @@ class ARSceneController: UIViewController {
     /// A serial queue used to coordinate adding or removing nodes from the scene.
     let updateQueue = DispatchQueue(label: "com.example.apple-samplecode.arkitexample.serialSceneKitQueue")
 
-    private var canPlaceObject: Bool = false
+    private var isPlaneDetected: Bool = false
     
     
     // 状态变量
     private var isDrawing = false
     private var startLocation: SCNVector3? // 起点
-    private var dashedLineNodes: [SCNNode] = [] // 当前绘制的虚线节点
+    private var dashedLineNodes: [SCNNode] = [] // 当前绘制的虚线点
+    
+    // 1. 每个线段的起始点位置（测面积）
+    // 2. 每个线段的起始点和终点位置（测距离）
+    private var allSidePoints: [SCNVector3] = [] {
+        didSet {
+            switch drawFunction {
+            case .line:
+                // 测距离模式，结束绘制后，把直线的两头作为可吸附的 node
+                if !isDrawing {
+                    lineEndPoints.append(contentsOf: allSidePoints)
+                }
+            case .square:
+                // 测面积模式，超过两条线段，则把第一个起始点作为可吸附的 node
+                guard allSidePoints.count >= 3, let firstPoint = allSidePoints.first else { return }
+                lineEndPoints.append(firstPoint)
+            }
+        }
+    }
+    
     private var finishedDashedLines: [[SCNNode]] = [] // 已完成的虚线集合
-    private var lineSidePoints: [SCNVector3] = [] // 所有虚线的起始点
+    private var lineEndPoints: [SCNVector3] = []
     
     private var drawFunction: DrawFunction = .square
+    
+    
+    
+    // 是否已经吸附了，防止震动反馈多次
+    private var isAdsorption: Bool = false
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -165,9 +189,10 @@ class ARSceneController: UIViewController {
         if drawFunction == .square {
             
             // 如果起始点和终点重合就停止绘制
-            if let startNode = self.dashedLineNodes.first, let endNode = self.dashedLineNodes.last {
-                
-            }
+//            if let startNode = self.dashedLineNodes.first,
+//               let endNode = self.dashedLineNodes.last {
+//                
+//            }
             // 开始新的虚线绘制
             startDrawing()
         } else {
@@ -189,8 +214,12 @@ class ARSceneController: UIViewController {
         guard let startLocation = startLocation else { return }
         let initialEndLocation = startLocation
 
+        if drawFunction == .line {
+            clearDashedLine()
+        }
 //        clearDashedLine()
-
+        
+        allSidePoints.append(startLocation)
         dashedLineNodes = createDashedLine(from: startLocation, to: initialEndLocation, interval: 0.01, radius: 0.002, color: .white)
 //        if let firstNode = dashedLineNodes.first {
 //            lineSidePoints.append(firstNode.position)
@@ -203,13 +232,16 @@ class ARSceneController: UIViewController {
 
     // 结束绘制虚线
     private func finishDrawing() {
-        isDrawing = false
         // 将当前虚线保存到已完成虚线集合
         finishedDashedLines.append(dashedLineNodes)
-//        if let lastNode = dashedLineNodes.last {
-//            lineSidePoints.append(lastNode.position)
-//        }
+        
+        // 结束点
+        if let lastNode = dashedLineNodes.last {
+            lineEndPoints.append(lastNode.position)
+        }
+        
         dashedLineNodes = []
+        isDrawing = false
     }
     
     
@@ -271,58 +303,42 @@ class ARSceneController: UIViewController {
     }
     
     
-    private func checkSnapToLineEndpoints(focusSquare: FocusSquare, lineEndpoints: [SCNVector3]) {
-        let focusPosition = focusSquare.centerNode.worldPosition
+    private func checkSnapToLineEndpoints(centerPosition:SCNVector3, lineEndpoints: [SCNVector3]) {
+        let focusPosition = centerPosition//focusSquare.centerNode.worldPosition
         
         // 吸附范围
-        let snapRange: Float = 0.02// 3cm
+        let snapRange: Float = 0.05// 5cm
         
         for endpoint in lineEndpoints {
             let distance = focusPosition.distance(to: endpoint)
             if distance <= snapRange {
+                // 小于 5cm 自动吸附
                 snapToEndpoint(focusSquare: focusSquare, endpoint: endpoint)
-                return
+            } else {
+                // 大于 5cm 回到初始位置
+                resetFocusSquareCenter(focusSquare: focusSquare)
             }
         }
-        
-        // 复位
-        resetFocusSquareCenter(focusSquare: focusSquare)
-        
     }
     
     private func snapToEndpoint(focusSquare: FocusSquare, endpoint: SCNVector3) {
-        // 吸附到端点，直接跳转
         focusSquare.centerNode.worldPosition = endpoint
-        
-        // 明显的吸附反馈动画（如放大和缩小的快速跳动效果）
-        let originalScale = focusSquare.centerNode.scale
-        let enlargedScale = SCNVector3(1.5, 1.5, 1.5) // 放大至 1.5 倍
-        
-        SCNTransaction.begin()
-        SCNTransaction.animationDuration = 0.1 // 快速放大
-        focusSquare.centerNode.scale = enlargedScale
-        SCNTransaction.completionBlock = {
-            SCNTransaction.begin()
-            SCNTransaction.animationDuration = 0.1 // 快速缩小回原大小
-            focusSquare.centerNode.scale = originalScale
-            SCNTransaction.commit()
+        if !isAdsorption {
+            // 吸附到端点
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            isAdsorption = true
+            updateDashedLine(to: endpoint)
         }
-        SCNTransaction.commit()
     }
     
     private func resetFocusSquareCenter(focusSquare: FocusSquare) {
-        // 直接设置位置为初始位置
         let initialPosition = SIMD3<Float>(0, 0.005, 0)
         focusSquare.centerNode.simdPosition = initialPosition
-        
-        // 添加快速恢复缩放的动画
-        let originalScale = SCNVector3(1.0, 1.0, 1.0)
-        focusSquare.centerNode.scale = SCNVector3(0.8, 0.8, 0.8) // 缩小一点点作为复位动画的起始点
-        
-        SCNTransaction.begin()
-        SCNTransaction.animationDuration = 0.1 // 快速恢复正常大小
-        focusSquare.centerNode.scale = originalScale
-        SCNTransaction.commit()
+        if isAdsorption {
+            // 直接设置位置为初始位置
+            isAdsorption = false
+        }
     }
 
 }
@@ -331,24 +347,29 @@ extension ARSceneController: ARSCNViewDelegate {
     func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
         DispatchQueue.main.async {
             self.updateFocusSquare(isObjectVisible: false)
-//            if !self.lineSidePoints.isEmpty {
-//                self.checkSnapToLineEndpoints(focusSquare: self.focusSquare, lineEndpoints: self.lineSidePoints)
-//            }
+            if !self.lineEndPoints.isEmpty {
+                let screenCenter = self.sceneView.screenCenter
+                guard let hitTestResult = self.sceneView.smartHitTest(screenCenter) else { return }
+                self.checkSnapToLineEndpoints(centerPosition: SCNVector3(hitTestResult.worldTransform.translation), lineEndpoints: self.lineEndPoints)
+            }
         }
         
         DispatchQueue.main.async {
             let screenCenter = self.sceneView.screenCenter
             guard let hitTestResult = self.sceneView.smartHitTest(screenCenter), !self.dashedLineNodes.isEmpty else { return }
             let endLocation = SCNVector3(hitTestResult.worldTransform.translation)
-            self.updateDashedLine(to: endLocation)
+            // 如果已经吸附了就不让他主动更新
+            if !self.isAdsorption {
+                self.updateDashedLine(to: endLocation)
+            }
+            
         }
     }
     
     func renderer(_ renderer: any SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
         guard let planeAnchor = anchor as? ARPlaneAnchor else { return }
         if planeAnchor.alignment == .horizontal || planeAnchor.alignment == .vertical {
-            print("找到平面了1")
-            canPlaceObject = true
+            isPlaneDetected = true
         }
     }
     
