@@ -68,8 +68,22 @@ extension SCNVector3 {
     }
 }
 
+extension SCNQuaternion {
+    // 通过轴和角度创建四元数
+    init(axis: SCNVector3, angle: Float) {
+        let halfAngle = angle / 2
+        let sinHalfAngle = sin(halfAngle)
+        self.init(
+            x: axis.x * sinHalfAngle,
+            y: axis.y * sinHalfAngle,
+            z: axis.z * sinHalfAngle,
+            w: cos(halfAngle)
+        )
+    }
+}
 
-import UIKit
+
+
 
 extension UIColor {
     convenience init(hex: String) {

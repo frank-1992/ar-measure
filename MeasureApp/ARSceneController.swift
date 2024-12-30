@@ -407,37 +407,36 @@ class ARSceneController: UIViewController {
             (startLocation.z + endLocation.z) / 2
         )
         
-        // 计算直线方向向量（在 xz 平面内）
+        // 计算直线方向向量
         let directionVector = SCNVector3(
             endLocation.x - startLocation.x,
-            0, // y 保持为 0，表示在 xz 平面
+            endLocation.y - startLocation.y,
             endLocation.z - startLocation.z
         )
+        let normalizedDirection = directionVector.normalized()
 
-        // 归一化方向向量
-        let directionLength = sqrt(directionVector.x * directionVector.x + directionVector.z * directionVector.z)
-        let normalizedDirection = SCNVector3(directionVector.x / directionLength, 0, directionVector.z / directionLength)
+        // 计算旋转角度，确保面板的长边（X 轴）平行于直线
+        let angleXZ = atan2(normalizedDirection.z, normalizedDirection.x) // XZ 平面上的旋转角度
+        let angleY = atan2(normalizedDirection.y, sqrt(normalizedDirection.x * normalizedDirection.x + normalizedDirection.z * normalizedDirection.z)) // Y 方向角度
 
-        // 计算旋转角度（绕 y 轴旋转）
-        let angle = atan2(normalizedDirection.z, normalizedDirection.x)
-
-        // 创建旋转矩阵
-        let rotation = SCNMatrix4MakeRotation(-angle, 0, 1, 0) // 绕 y 轴旋转
+        let rotationMatrix = SCNMatrix4Mult(
+            SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0), // 绕 Y 轴的旋转
+            SCNMatrix4MakeRotation(angleY, 0, 0, 1)   // 绕 X 轴的旋转
+        )
         
+
         
         if currentDistance >= 0.1 {// 大于文字面板的宽度
             let roundedDistance = Int(currentDistance * 100)
             if let currentLabelNode = currentLabelNode {
                 updateLabelNode(text: "\(roundedDistance) cm")
-                // 注意这里需要先应用旋转再设置位置，不然会让 position 的 y 变成 0
-                currentLabelNode.transform = rotation
-                currentLabelNode.position = middlePosition
+                currentLabelNode.transform = rotationMatrix
+                currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
 
             } else {
                 let labelNode = createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
-                // 注意这里需要先应用旋转再设置位置，不然会让 position 的 y 变成 0
-                labelNode.transform = rotation
-                labelNode.position = middlePosition
+                labelNode.transform = rotationMatrix
+                labelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
                 sceneView.scene.rootNode.addChildNode(labelNode)
                 currentLabelNode = labelNode
             }
@@ -634,10 +633,7 @@ class ARSceneController: UIViewController {
         plane.firstMaterial?.isDoubleSided = true
         
         let planeNode = SCNNode(geometry: plane)
-        
-//        let constraint = SCNBillboardConstraint()
-//        constraint.freeAxes = [.Y]
-//        planeNode.constraints = [constraint]
+        planeNode.renderingOrder = 100
         
         return planeNode
     }
