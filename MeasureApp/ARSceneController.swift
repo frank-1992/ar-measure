@@ -414,17 +414,14 @@ class ARSceneController: UIViewController {
             endLocation.z - startLocation.z
         )
         let normalizedDirection = directionVector.normalized()
-
-        // 计算旋转角度，确保面板的长边（X 轴）平行于直线
-        let angleXZ = atan2(normalizedDirection.z, normalizedDirection.x) // XZ 平面上的旋转角度
-        let angleY = atan2(normalizedDirection.y, sqrt(normalizedDirection.x * normalizedDirection.x + normalizedDirection.z * normalizedDirection.z)) // Y 方向角度
-
-        let rotationMatrix = SCNMatrix4Mult(
-            SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0), // 绕 Y 轴的旋转
-            SCNMatrix4MakeRotation(angleY, 0, 0, 1)   // 绕 X 轴的旋转
-        )
         
+        let angleXZ = atan2(normalizedDirection.z, normalizedDirection.x)
+        var rotationMatrix = SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0)
 
+        // 让面板围绕直线方向轴旋转 -90°，实现平躺在直线上
+        let axisRotation = SCNMatrix4MakeRotation(-.pi / 2, normalizedDirection.x, normalizedDirection.y, normalizedDirection.z)
+        rotationMatrix = SCNMatrix4Mult(rotationMatrix, axisRotation)
+        
         
         if currentDistance >= 0.1 {// 大于文字面板的宽度
             let roundedDistance = Int(currentDistance * 100)
