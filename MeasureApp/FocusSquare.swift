@@ -1,9 +1,10 @@
-/*
-See LICENSE folder for this sample’s licensing information.
+//
+//  FocusSquare.swift
+//  MeasureApp
+//
+//  Created by 吴熠 on 2024/12/17.
+//
 
-Abstract:
-SceneKit node giving the user hints about the status of ARKit world tracking.
-*/
 
 import Foundation
 import ARKit

@@ -243,6 +243,7 @@ class ARSceneController: UIViewController {
     
     private func startDrawing() {
         isDrawing = true
+        currentLabelNode = nil
         guard let hitTestResult = sceneView.smartHitTest(sceneView.center) else { return }
         startLocation = SCNVector3(hitTestResult.worldTransform.translation)
         
@@ -291,6 +292,7 @@ class ARSceneController: UIViewController {
     // 结束绘制虚线
     private func finishDrawing() {
         isDrawing = false
+        currentLabelNode = nil
         // 将当前虚线保存到已完成虚线集合
         finishedDashedLines.append(dashedLineNodes)
         
