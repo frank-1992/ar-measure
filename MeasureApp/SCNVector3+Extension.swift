@@ -34,6 +34,14 @@ extension SCNVector3 {
         )
     }
     
+    /// 计算两个 3D 点之间的距离
+    func distance(to point: SCNVector3) -> Float {
+        let dx = x - point.x
+        let dy = y - point.y
+        let dz = z - point.z
+        return sqrt(dx * dx + dy * dy + dz * dz)
+    }
+    
     /// 向量减法
     static func +(left: SCNVector3, right: SCNVector3) -> SCNVector3 {
         return SCNVector3(left.x + right.x, left.y + right.y, left.z + right.z)
@@ -49,11 +57,6 @@ extension SCNVector3 {
     
     static func /(vector: SCNVector3, scalar: Float) -> SCNVector3 {
         return SCNVector3(vector.x / scalar, vector.y / scalar, vector.z / scalar)
-    }
-    
-    /// 计算两个 3D 点之间的距离
-    func distance(to vector: SCNVector3) -> Float {
-        return sqrt(pow(x - vector.x, 2) + pow(y - vector.y, 2) + pow(z - vector.z, 2))
     }
     
     public static func == (lhs: SCNVector3, rhs: SCNVector3) -> Bool {

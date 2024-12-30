@@ -75,6 +75,7 @@ class ARSceneController: UIViewController {
     private var startAdsorptionLocation: SCNVector3? // 从吸附点绘制的起点
     private var endAdsorptionLocation: SCNVector3? // 绘制过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
     private var allLineNodes: [SCNNode] = []
+    private var currentLabelNode: SCNNode?
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -91,7 +92,10 @@ class ARSceneController: UIViewController {
         
         // Set up scene content.
         sceneView.scene.rootNode.addChildNode(focusSquare)
-
+        
+//        let labelNode = createLabelNode(text: "19 cm", width: 0.1, height: 0.05)
+//        labelNode.position = SCNVector3(0, 0, -0.2)
+//        sceneView.scene.rootNode.addChildNode(labelNode)
     }
     
     public override func viewWillAppear(_ animated: Bool) {
@@ -393,6 +397,50 @@ class ARSceneController: UIViewController {
     private func updateDashedLine(to endLocation: SCNVector3) {
         guard var startLocation = startLocation else { return }
         
+        // 计算起始点至当前点的距离
+        let currentDistance = endLocation.distance(to: startLocation)
+        let middlePosition = SCNVector3(
+            (startLocation.x + endLocation.x) / 2,
+            (startLocation.y + endLocation.y) / 2,
+            (startLocation.z + endLocation.z) / 2
+        )
+        
+        // 计算直线方向向量（在 xz 平面内）
+        let directionVector = SCNVector3(
+            endLocation.x - startLocation.x,
+            0, // y 保持为 0，表示在 xz 平面
+            endLocation.z - startLocation.z
+        )
+
+        // 归一化方向向量
+        let directionLength = sqrt(directionVector.x * directionVector.x + directionVector.z * directionVector.z)
+        let normalizedDirection = SCNVector3(directionVector.x / directionLength, 0, directionVector.z / directionLength)
+
+        // 计算旋转角度（绕 y 轴旋转）
+        let angle = atan2(normalizedDirection.z, normalizedDirection.x)
+
+        // 创建旋转矩阵
+        let rotation = SCNMatrix4MakeRotation(-angle, 0, 1, 0) // 绕 y 轴旋转
+        
+        
+        if currentDistance >= 0.1 {// 大于文字面板的宽度
+            let roundedDistance = Int(currentDistance * 100)
+            if let currentLabelNode = currentLabelNode {
+                updateLabelNode(text: "\(roundedDistance) cm")
+                // 注意这里需要先应用旋转再设置位置，不然会让 position 的 y 变成 0
+                currentLabelNode.transform = rotation
+                currentLabelNode.position = middlePosition
+
+            } else {
+                let labelNode = createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
+                // 注意这里需要先应用旋转再设置位置，不然会让 position 的 y 变成 0
+                labelNode.transform = rotation
+                labelNode.position = middlePosition
+                sceneView.scene.rootNode.addChildNode(labelNode)
+                currentLabelNode = labelNode
+            }
+        }
+        
         // 如果是从吸附点开始绘制的 那么更新的时候虚线起点也是吸附点
         if let startAdsorptionLocation = startAdsorptionLocation {
             startLocation = startAdsorptionLocation
@@ -543,7 +591,95 @@ class ARSceneController: UIViewController {
         
         return lineNode
     }
-
+    
+    // 创建尺寸显示面板
+    private func createLabelNode(text: String, width: CGFloat, height: CGFloat) -> SCNNode {
+        let plane = SCNPlane(width: width, height: height)
+        
+        // 这边 * 1000 是为了提高分辨率
+        let size = CGSize(width: width * 1000, height: height * 1000)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { ctx in
+            let rect = CGRect(origin: .zero, size: size)
+            ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(0.8).cgColor)
+            
+            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
+            ctx.cgContext.addPath(path.cgPath)
+            ctx.cgContext.fillPath()
+            
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.alignment = .center
+            
+            let fontSize = size.height * 0.4
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: fontSize),
+                .foregroundColor: UIColor.black,
+                .paragraphStyle: paragraphStyle
+            ]
+            
+            let textSize = text.size(withAttributes: attributes)
+            let textRect = CGRect(
+                x: (size.width - textSize.width) / 2,  // 水平居中
+                y: (size.height - textSize.height) / 2, // 垂直居中
+                width: textSize.width,
+                height: textSize.height
+            )
+            
+            text.draw(in: textRect, withAttributes: attributes)
+        }
+        
+        plane.firstMaterial?.diffuse.contents = image
+        plane.firstMaterial?.isDoubleSided = true
+        
+        let planeNode = SCNNode(geometry: plane)
+        
+//        let constraint = SCNBillboardConstraint()
+//        constraint.freeAxes = [.Y]
+//        planeNode.constraints = [constraint]
+        
+        return planeNode
+    }
+    
+    private func updateLabelNode(text: String, alpha: CGFloat = 0.8) {
+        if let existingLabelNode = currentLabelNode,
+           let plane = existingLabelNode.geometry as? SCNPlane {
+            let width = plane.width
+            let height = plane.height
+            // 这边 * 1000 是为了提高分辨率
+            let size = CGSize(width: width * 1000, height: height * 1000)
+            let renderer = UIGraphicsImageRenderer(size: size)
+            let image = renderer.image { ctx in
+                let rect = CGRect(origin: .zero, size: size)
+                ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(alpha).cgColor)
+                
+                let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
+                ctx.cgContext.addPath(path.cgPath)
+                ctx.cgContext.fillPath()
+                
+                let paragraphStyle = NSMutableParagraphStyle()
+                paragraphStyle.alignment = .center
+                
+                let fontSize = size.height * 0.4
+                let attributes: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: fontSize),
+                    .foregroundColor: UIColor.black,
+                    .paragraphStyle: paragraphStyle
+                ]
+                
+                let textSize = text.size(withAttributes: attributes)
+                let textRect = CGRect(
+                    x: (size.width - textSize.width) / 2,  // 水平居中
+                    y: (size.height - textSize.height) / 2, // 垂直居中
+                    width: textSize.width,
+                    height: textSize.height
+                )
+                
+                text.draw(in: textRect, withAttributes: attributes)
+            }
+            plane.firstMaterial?.diffuse.contents = image
+            plane.firstMaterial?.isDoubleSided = true
+        }
+    }
 
 }
 
