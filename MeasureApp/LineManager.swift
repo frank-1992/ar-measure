@@ -10,7 +10,7 @@ import SceneKit
 
 class DashLineManager {
     
-    private var currentLabelNode: SCNNode?
+    public var currentLabelNode: SCNNode?
     
     // MARK: - 创建虚线（球体）
     func createDashedLine(start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) -> SCNNode {
@@ -167,7 +167,7 @@ class DashLineManager {
         return CGFloat(sqrt(pow(end.x - start.x, 2) + pow(end.y - start.y, 2) + pow(end.z - start.z, 2)))
     }
     
-    private func midPointBetween(_ start: SCNVector3, _ end: SCNVector3) -> SCNVector3 {
+    public func midPointBetween(_ start: SCNVector3, _ end: SCNVector3) -> SCNVector3 {
         return SCNVector3((start.x + end.x) / 2, (start.y + end.y) / 2, (start.z + end.z) / 2)
     }
     

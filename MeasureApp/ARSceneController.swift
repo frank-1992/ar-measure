@@ -78,7 +78,6 @@ class ARSceneController: UIViewController {
     private var startAdsorptionLocation: SCNVector3? // 从吸附点绘制的起点
     private var endAdsorptionLocation: SCNVector3? // 绘制过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
     private var allLineNodes: [SCNNode] = []
-    private var currentLabelNode: SCNNode?
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -246,7 +245,6 @@ class ARSceneController: UIViewController {
     
     private func startDrawing() {
         isDrawing = true
-        currentLabelNode = nil
         guard let hitTestResult = sceneView.smartHitTest(sceneView.center) else { return }
         startLocation = SCNVector3(hitTestResult.worldTransform.translation)
         
@@ -283,6 +281,8 @@ class ARSceneController: UIViewController {
                     color: .systemGreen,
                     thickness: 0.004
                 )
+                // 添加尺寸显示面板
+                addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                 allLineNodes.append(lineNode)
                 sceneView.scene.rootNode.addChildNode(lineNode)
             }
@@ -293,7 +293,6 @@ class ARSceneController: UIViewController {
     // 结束绘制虚线
     private func finishDrawing() {
         isDrawing = false
-        currentLabelNode = nil
         // 将当前虚线保存到已完成虚线集合
         if let dashedLineNode = dashedLineNode {
             finishedDashedLines.append(dashedLineNode)
@@ -324,6 +323,8 @@ class ARSceneController: UIViewController {
                         color: .systemGreen,
                         thickness: 0.004
                     )
+                    // 添加尺寸显示面板
+                    addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                     allLineNodes.append(lineNode)
                     sceneView.scene.rootNode.addChildNode(lineNode)
                     
@@ -340,6 +341,8 @@ class ARSceneController: UIViewController {
                         color: .systemGreen,
                         thickness: 0.004
                     )
+                    // 添加尺寸显示面板
+                    addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                     allLineNodes.append(lineNode)
                     sceneView.scene.rootNode.addChildNode(lineNode)
                 }
@@ -356,107 +359,24 @@ class ARSceneController: UIViewController {
                     color: .systemGreen,
                     thickness: 0.004
                 )
+                // 添加尺寸显示面板
+                addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                 allLineNodes.append(lineNode)
                 sceneView.scene.rootNode.addChildNode(lineNode)
             }
         }
     }
     
-    
-    // MARK: - 创建虚线起点
-//    private func createDashedLine(from start: SCNVector3, to end: SCNVector3, interval: Float, radius: CGFloat, color: UIColor) -> [SCNNode] {
-//        var nodes: [SCNNode] = []
-//        let vector = SCNVector3(x: end.x - start.x, y: end.y - start.y, z: end.z - start.z)
-//        let distance = sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z)
-//
-//        guard distance > 0 else {
-//            // 一开始 起点和终点相同的话只绘制一个点 起始点
-//            let sphere = SCNSphere(radius: radius)
-//            sphere.firstMaterial?.diffuse.contents = color
-//            let sphereNode = SCNNode(geometry: sphere)
-//            sphereNode.position = start
-//            nodes.append(sphereNode)
-//            return nodes
-//        }
-//
-//        let direction = vector.normalized()
-//        var currentPosition = start
-//
-//        while (currentPosition - start).length() < distance {
-//            let sphere = SCNSphere(radius: radius)
-//            sphere.firstMaterial?.diffuse.contents = color
-//            let sphereNode = SCNNode(geometry: sphere)
-//            sphereNode.position = currentPosition
-//            nodes.append(sphereNode)
-//
-//            // 按间隔更新位置
-//            currentPosition.x += direction.x * interval
-//            currentPosition.y += direction.y * interval
-//            currentPosition.z += direction.z * interval
-//        }
-//
-//        return nodes
-//    }
+    private func addLabelNode(to lineNode: SCNNode, startPoint: SCNVector3, endPoint: SCNVector3) {
+        if let currentLabelNode = dashLineManager.currentLabelNode {
+            let middlePosition = dashLineManager.midPointBetween(startPoint, endPoint)
+            currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
+            lineNode.addChildNode(currentLabelNode)
+//            currentLabelNode.look(at: startPoint, up: sceneView.scene.rootNode.worldFront, localFront: SCNVector3(0, 1, 0))
 
-    // MARK: -  camera 移动的时候动态更新虚线
-//    private func updateDashedLine(to endLocation: SCNVector3) {
-//        guard var startLocation = startLocation else { return }
-//        
-//        // 计算起始点至当前点的距离
-//        let currentDistance = endLocation.distance(to: startLocation)
-//        let middlePosition = SCNVector3(
-//            (startLocation.x + endLocation.x) / 2,
-//            (startLocation.y + endLocation.y) / 2,
-//            (startLocation.z + endLocation.z) / 2
-//        )
-//        
-//        // 计算直线方向向量
-//        let directionVector = SCNVector3(
-//            endLocation.x - startLocation.x,
-//            endLocation.y - startLocation.y,
-//            endLocation.z - startLocation.z
-//        )
-//        let normalizedDirection = directionVector.normalized()
-//        
-//        let angleXZ = atan2(normalizedDirection.z, normalizedDirection.x)
-//        var rotationMatrix = SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0)
-//
-//        // 让面板围绕直线方向轴旋转 -90°，实现平躺在直线上
-//        let axisRotation = SCNMatrix4MakeRotation(-.pi / 2, normalizedDirection.x, normalizedDirection.y, normalizedDirection.z)
-//        rotationMatrix = SCNMatrix4Mult(rotationMatrix, axisRotation)
-//        
-//        
-//        if currentDistance >= 0.1 {// 大于文字面板的宽度
-//            let roundedDistance = Int(currentDistance * 100)
-//            if let currentLabelNode = currentLabelNode {
-//                updateLabelNode(text: "\(roundedDistance) cm")
-//                currentLabelNode.transform = rotationMatrix
-//                currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
-//
-//            } else {
-//                let labelNode = createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
-//                labelNode.transform = rotationMatrix
-//                labelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
-//                sceneView.scene.rootNode.addChildNode(labelNode)
-//                currentLabelNode = labelNode
-//            }
-//        }
-//        
-//        // 如果是从吸附点开始绘制的 那么更新的时候虚线起点也是吸附点
-//        if let startAdsorptionLocation = startAdsorptionLocation {
-//            startLocation = startAdsorptionLocation
-//        }
-//        
-//        // 1. 先清除旧虚线
-//        clearDashedLine()
-//
-//        // 2. 创建新的虚线
-//        dashedLineNodes = createDashedLine(from: startLocation, to: endLocation, interval: 0.01, radius: 0.002, color: .white)
-//        for node in dashedLineNodes {
-//            sceneView.scene.rootNode.addChildNode(node)
-//        }
-//        previousDashedLineNodes = dashedLineNodes
-//    }
+            dashLineManager.currentLabelNode = nil
+        }
+    }
     
     // MARK: - 清楚旧的虚线
     private func clearDashedLine() {
@@ -553,24 +473,16 @@ class ARSceneController: UIViewController {
     
     // MARK: - 创建实线
     private func createLineBetween(point1: SCNVector3, point2: SCNVector3, color: UIColor, thickness: CGFloat) -> SCNNode {
-        // 计算两点之间的向量
         let vector = point2 - point1
         let distance = vector.length()
         
-        // 创建圆柱体表示直线
         let cylinder = SCNCylinder(radius: thickness / 2, height: CGFloat(distance))
         cylinder.firstMaterial?.diffuse.contents = color
         
-        // 创建圆柱体节点
         let cylinderNode = SCNNode(geometry: cylinder)
-        
-        // 设置圆柱体的中心位置
         cylinderNode.position = (point1 + point2) / 2
-        
-        // 计算圆柱体的朝向
         cylinderNode.look(at: point2, up: sceneView.scene.rootNode.worldUp, localFront: SCNVector3(0, 1, 0))
         
-        // 创建线段的父节点
         let lineNode = SCNNode()
         lineNode.addChildNode(cylinderNode)
         
@@ -603,93 +515,6 @@ class ARSceneController: UIViewController {
         
         return lineNode
     }
-    
-    // 创建尺寸显示面板
-    private func createLabelNode(text: String, width: CGFloat, height: CGFloat) -> SCNNode {
-        let plane = SCNPlane(width: width, height: height)
-        
-        // 这边 * 1000 是为了提高分辨率
-        let size = CGSize(width: width * 1000, height: height * 1000)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { ctx in
-            let rect = CGRect(origin: .zero, size: size)
-            ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(0.8).cgColor)
-            
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-            ctx.cgContext.addPath(path.cgPath)
-            ctx.cgContext.fillPath()
-            
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.alignment = .center
-            
-            let fontSize = size.height * 0.4
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: fontSize),
-                .foregroundColor: UIColor.black,
-                .paragraphStyle: paragraphStyle
-            ]
-            
-            let textSize = text.size(withAttributes: attributes)
-            let textRect = CGRect(
-                x: (size.width - textSize.width) / 2,  // 水平居中
-                y: (size.height - textSize.height) / 2, // 垂直居中
-                width: textSize.width,
-                height: textSize.height
-            )
-            
-            text.draw(in: textRect, withAttributes: attributes)
-        }
-        
-        plane.firstMaterial?.diffuse.contents = image
-        plane.firstMaterial?.isDoubleSided = true
-        
-        let planeNode = SCNNode(geometry: plane)
-        planeNode.renderingOrder = 100
-        
-        return planeNode
-    }
-    
-    private func updateLabelNode(text: String, alpha: CGFloat = 0.8) {
-        if let existingLabelNode = currentLabelNode,
-           let plane = existingLabelNode.geometry as? SCNPlane {
-            let width = plane.width
-            let height = plane.height
-            // 这边 * 1000 是为了提高分辨率
-            let size = CGSize(width: width * 1000, height: height * 1000)
-            let renderer = UIGraphicsImageRenderer(size: size)
-            let image = renderer.image { ctx in
-                let rect = CGRect(origin: .zero, size: size)
-                ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(alpha).cgColor)
-                
-                let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-                ctx.cgContext.addPath(path.cgPath)
-                ctx.cgContext.fillPath()
-                
-                let paragraphStyle = NSMutableParagraphStyle()
-                paragraphStyle.alignment = .center
-                
-                let fontSize = size.height * 0.4
-                let attributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: fontSize),
-                    .foregroundColor: UIColor.black,
-                    .paragraphStyle: paragraphStyle
-                ]
-                
-                let textSize = text.size(withAttributes: attributes)
-                let textRect = CGRect(
-                    x: (size.width - textSize.width) / 2,  // 水平居中
-                    y: (size.height - textSize.height) / 2, // 垂直居中
-                    width: textSize.width,
-                    height: textSize.height
-                )
-                
-                text.draw(in: textRect, withAttributes: attributes)
-            }
-            plane.firstMaterial?.diffuse.contents = image
-            plane.firstMaterial?.isDoubleSided = true
-        }
-    }
-
 }
 
 extension ARSceneController: ARSCNViewDelegate {
