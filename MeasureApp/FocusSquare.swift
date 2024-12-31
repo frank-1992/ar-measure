@@ -84,7 +84,6 @@ class FocusSquare: SCNNode {
         positioningNode = SCNNode(geometry: plane)
         positioningNode.simdEulerAngles = simd_float3(-.pi / 2.0, 0, 0)
         positioningNode.simdPosition = simd_float3(0, 0, 0)
-        
         // 始终将聚焦框渲染在其他内容之上
         displayNodeHierarchyOnTop(true)
         
@@ -92,7 +91,7 @@ class FocusSquare: SCNNode {
         sphere.firstMaterial?.diffuse.contents = UIColor.white
         let sphereNode = SCNNode(geometry: sphere)
         sphereNode.simdPosition = simd_float3(0, 0.005, 0)// 这个地方给个 y 值是因为要让指引框的中心球的位置在虚线球的上方，让虚线球是从中心球下方出来，而不是从中心球内部出来
-        sphereNode.renderingOrder = 1000;
+        sphereNode.renderingOrder = 100;
         centerNode = sphereNode
         
         addChildNode(sphereNode)
