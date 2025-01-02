@@ -9,9 +9,42 @@ import UIKit
 import SceneKit
 import ARKit
 
+
+enum MeasurementUnit {
+    case meters
+    case centimeters
+    case millimeters
+    case inches
+
+    func formattedValue(from meters: CGFloat) -> String {
+        switch self {
+        case .meters:
+            return String(format: "%.2f m", meters)
+        case .centimeters:
+            return String(format: "%d cm", Int(meters * 100))
+        case .millimeters:
+            return String(format: "%d mm", Int(meters * 1000))
+        case .inches:
+            return String(format: "%.0f in", meters / 2.54)
+        }
+    }
+}
+
+
 class Polygon2DManager: NSObject {
     
     public var drawMode: DrawMode = .line
+    
+    public var measurementUnit: MeasurementUnit = .centimeters {
+        didSet {
+            for (label, value) in allSizeLabels {
+                label.text = measurementUnit.formattedValue(from: value)
+            }
+        }
+    }
+    
+    // 所有尺寸面板集合
+    public var allSizeLabels: [UILabel: CGFloat] = [:]
     
     func render3DPolygonTo2D(
         points3D: [SCNVector3],
@@ -188,11 +221,12 @@ class Polygon2DManager: NSObject {
         
         // 添加尺寸文本
         let distanceLabel = UILabel(frame: labelBackground.bounds)
-        distanceLabel.text = String(format: "%d cm", Int(distance * 100))
+        distanceLabel.text = measurementUnit.formattedValue(from: distance)
         distanceLabel.font = UIFont.systemFont(ofSize: 12)
         distanceLabel.textAlignment = .center
         distanceLabel.textColor = .white
         labelBackground.addSubview(distanceLabel)
+        self.allSizeLabels[distanceLabel] = distance
         
         // 旋转标注，使其与线段平行
         let angle = atan2(point2.y - point1.y, point2.x - point1.x)
