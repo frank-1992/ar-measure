@@ -94,7 +94,6 @@ class ARSceneController: UIViewController {
         
         // Set up scene content.
         sceneView.scene.rootNode.addChildNode(focusSquare)
-        
 //        let labelNode = createLabelNode(text: "19 cm", width: 0.1, height: 0.05)
 //        labelNode.position = SCNVector3(0, 0, -0.2)
 //        sceneView.scene.rootNode.addChildNode(labelNode)

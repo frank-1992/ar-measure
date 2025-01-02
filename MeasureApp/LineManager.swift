@@ -69,24 +69,14 @@ class DashLineManager {
                     if direction.x < 0 {
                         sizePanel.eulerAngles.y += .pi // 翻转文字方向
                     }
-                    
                 } else {
                     let sizePanel = self.createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
                     sizePanel.name = "SizePanel"
                     sizePanel.transform = rotationMatrix
                     sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
-                    
-                    // 确保文字正向显示
-//                    let forwardVector = SCNVector3(0, 0, 1)//世界坐标系参考方向
-//                   // 如果直线可能出现在其他象限（不仅仅在 X 轴正方向或负方向），也可以考虑基于完整的方向向量来判断，而非仅依赖 direction.x
-//                    let dotProduct = direction.x * forwardVector.x + direction.z * forwardVector.z
-//                    if dotProduct < 0 {
-//                        sizePanel.eulerAngles.y += .pi
-//                    }
                     if direction.x < 0 {
                         sizePanel.eulerAngles.y += .pi // 翻转文字方向
                     }
-                    
                     self.currentLabelNode = sizePanel
                     node.addChildNode(sizePanel)
                 }
@@ -181,7 +171,6 @@ class DashLineManager {
             plane.firstMaterial?.isDoubleSided = true
         }
     }
-    
     
     // MARK: - 工具方法
     private func distanceBetween(_ start: SCNVector3, _ end: SCNVector3) -> CGFloat {
