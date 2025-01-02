@@ -7,7 +7,7 @@
 
 import SceneKit
 
-extension SCNVector3 {
+extension SCNVector3: @retroactive Equatable {
     /// 计算向量的长度
     func length() -> Float {
         return sqrt(x * x + y * y + z * z)

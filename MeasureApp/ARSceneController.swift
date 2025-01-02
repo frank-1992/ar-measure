@@ -86,6 +86,14 @@ class ARSceneController: UIViewController {
         button.setTitle("line", for: .normal)
         return button
     }()
+    
+    private lazy var doneButton: UIButton = {
+        let button = UIButton()
+        button.backgroundColor = UIColor.systemBlue;
+        button.addTarget(self, action: #selector(finish3DDraw), for: .touchUpInside)
+        button.setTitle("Done", for: .normal)
+        return button
+    }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -94,9 +102,6 @@ class ARSceneController: UIViewController {
         
         // Set up scene content.
         sceneView.scene.rootNode.addChildNode(focusSquare)
-//        let labelNode = createLabelNode(text: "19 cm", width: 0.1, height: 0.05)
-//        labelNode.position = SCNVector3(0, 0, -0.2)
-//        sceneView.scene.rootNode.addChildNode(labelNode)
     }
     
     public override func viewWillAppear(_ animated: Bool) {
@@ -121,12 +126,18 @@ class ARSceneController: UIViewController {
         view.backgroundColor = .white
         view.addSubview(sceneView)
         
-        sceneView .addSubview(addObjectButton)
+        sceneView.addSubview(addObjectButton)
         addObjectButton.snp.makeConstraints { make in
             make.bottom.equalTo(sceneView).offset(-80)
             make.centerX.equalTo(sceneView)
             make.width.equalTo(80)
             make.height.equalTo(50)
+        }
+        
+        view.addSubview(doneButton)
+        doneButton.snp.makeConstraints { make in
+            make.top.bottom.width.equalTo(addObjectButton)
+            make.trailing.equalTo(view).offset(-20)
         }
         
         // tap to place object
@@ -152,10 +163,24 @@ class ARSceneController: UIViewController {
         coachingOverlay.goal = .anyPlane
     }
     
+    @objc
+    private func finish3DDraw() {
+        let renderResult = Render2DPolygonController()
+        renderResult.points3D = allSidePoints
+        renderResult.drawMode = drawMode
+        let navigationController = UINavigationController(rootViewController: renderResult)
+        navigationController.modalPresentationStyle = .fullScreen
+        present(navigationController, animated: true)
+        
+        lineEndPoints.removeAll()
+        allSidePoints.removeAll()
+        resetFocusSquareCenter(focusSquare: focusSquare)
+    }
+    
     
     // MARK: - Focus Square
 
-    func updateFocusSquare(isObjectVisible: Bool) {
+    private func updateFocusSquare(isObjectVisible: Bool) {
         if isObjectVisible || coachingOverlay.isActive {
             focusSquare.hide()
         } else {
@@ -214,9 +239,9 @@ class ARSceneController: UIViewController {
     
     private func finishPolygon() {
         finishDrawing()
-        lineEndPoints.removeAll()
-        allSidePoints.removeAll()
-        resetFocusSquareCenter(focusSquare: focusSquare)
+//        lineEndPoints.removeAll()
+//        allSidePoints.removeAll()
+//        resetFocusSquareCenter(focusSquare: focusSquare)
     }
     
     @objc
@@ -666,121 +691,3 @@ extension ARSCNView {
         return CGPoint(x: bounds.midX, y: bounds.midY)
     }
 }
-
-
-
-//import UIKit
-//import ARKit
-//
-//class ARSceneController: UIViewController, ARSCNViewDelegate {
-//    private lazy var sceneView: ARSCNView = {
-//        let view = ARSCNView()
-//        view.delegate = self
-//        view.automaticallyUpdatesLighting = true
-//        return view
-//    }()
-//
-//    private let lineManager = LineManager() // 集成 LineManager
-//    private var dashedLineNode: SCNNode?
-//    private var isDrawing = false
-//    private var startPoint: SCNVector3?
-//
-//    override func viewDidLoad() {
-//        super.viewDidLoad()
-//        setupSceneView()
-//        setupGestures()
-//    }
-//
-//    private func setupSceneView() {
-//        sceneView.frame = view.bounds
-//        view.addSubview(sceneView)
-//    }
-//    
-//    public override func viewWillAppear(_ animated: Bool) {
-//        super.viewWillAppear(animated)
-//        resetTracking()
-//    }
-//    
-//    public override func viewWillDisappear(_ animated: Bool) {
-//        super.viewWillDisappear(animated)
-//        sceneView.session.pause()
-//    }
-//    
-//    private func resetTracking() {
-//        let configuration = ARWorldTrackingConfiguration()
-//        configuration.planeDetection = [.horizontal, .vertical]
-//        configuration.isLightEstimationEnabled = true
-//        configuration.environmentTexturing = .automatic
-//        sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
-//    }
-//    
-//
-//    private func setupGestures() {
-//        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-//        sceneView.addGestureRecognizer(tapGesture)
-//    }
-//
-//    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-//        let tapLocation = gesture.location(in: sceneView)
-//        guard let hitResult = sceneView.hitTest(tapLocation, types: .featurePoint).first else { return }
-//        let hitPosition = SCNVector3(
-//            hitResult.worldTransform.columns.3.x,
-//            hitResult.worldTransform.columns.3.y,
-//            hitResult.worldTransform.columns.3.z
-//        )
-//
-//        if isDrawing {
-//            finishDrawing(to: hitPosition)
-//        } else {
-//            startDrawing(from: hitPosition)
-//        }
-//    }
-//
-//    private func startDrawing(from startPoint: SCNVector3) {
-//        self.startPoint = startPoint
-//        dashedLineNode = SCNNode()
-//        sceneView.scene.rootNode.addChildNode(dashedLineNode!)
-//        isDrawing = true
-//    }
-//
-//    private func finishDrawing(to endPoint: SCNVector3) {
-//        guard let startPoint = startPoint else { return }
-//        let lineNode = lineManager.createLineBetween(
-//            start: startPoint,
-//            end: endPoint,
-//            color: .blue,
-//            thickness: 0.01
-//        )
-//        sceneView.scene.rootNode.addChildNode(lineNode)
-//
-//        dashedLineNode?.removeFromParentNode()
-//        dashedLineNode = nil
-//        isDrawing = false
-//    }
-//
-//    func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-//        guard let startPoint = startPoint, isDrawing else { return }
-//        DispatchQueue.main.async {
-//            let screenCenter = CGPoint(x: self.sceneView.bounds.midX, y: self.sceneView.bounds.midY)
-//            guard let hitResult = self.sceneView.hitTest(screenCenter, types: .featurePoint).first else { return }
-//            let endPoint = SCNVector3(
-//                hitResult.worldTransform.columns.3.x,
-//                hitResult.worldTransform.columns.3.y,
-//                hitResult.worldTransform.columns.3.z
-//            )
-//
-//            if let dashedLineNode = self.dashedLineNode {
-//                self.lineManager.updateDashedLine(
-//                    node: dashedLineNode,
-//                    start: startPoint,
-//                    end: endPoint,
-//                    color: .green,
-//                    thickness: 0.005,
-//                    segmentLength: 0.02,
-//                    spaceLength: 0.01
-//                )
-//            }
-//        }
-//    }
-//}
-
