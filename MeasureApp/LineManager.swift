@@ -42,30 +42,51 @@ class DashLineManager {
         DispatchQueue.global(qos: .userInitiated).async {
             let newLine = self.createDashedLine(start: start, end: end, color: color, thickness: thickness, segmentLength: segmentLength, spaceLength: spaceLength)
             DispatchQueue.main.async {
-                node.childNodes.forEach { $0.removeFromParentNode() }
+                node.childNodes.forEach {
+                    if $0.name != "SizePanel" {
+                        $0.removeFromParentNode()
+                    }
+                }
                 node.addChildNode(newLine)
+                
+                // 计算虚线方向的旋转
+                let direction = self.normalize(vector: end - start)
+                let angleXZ = atan2(direction.z, direction.x)
+                var rotationMatrix = SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0)
+                
+                // 让面板围绕直线方向轴旋转 -90°，实现平躺在直线上
+                let axisRotation = SCNMatrix4MakeRotation(-.pi / 2, direction.x, direction.y, direction.z)
+                rotationMatrix = SCNMatrix4Mult(rotationMatrix, axisRotation)
+                
+                let middlePosition = self.midPointBetween(start, end)
                 
                 // 添加或更新尺寸面板
                 let roundedDistance = Int(self.distanceBetween(start, end) * 100)
-                if let _ = node.childNode(withName: "SizePanel", recursively: false) {
+                if let sizePanel = node.childNode(withName: "SizePanel", recursively: false) {
                     self.updateLabelNode(text: "\(roundedDistance) cm")
+                    sizePanel.transform = rotationMatrix
+                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
+                    if direction.x < 0 {
+                        sizePanel.eulerAngles.y += .pi // 翻转文字方向
+                    }
+                    
                 } else {
                     let sizePanel = self.createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
                     sizePanel.name = "SizePanel"
-                    
-                    // 计算虚线方向的旋转
-                    let direction = self.normalize(vector: end - start)
-                    let angleXZ = atan2(direction.z, direction.x)
-                    var rotationMatrix = SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0)
-
-                    // 让面板围绕直线方向轴旋转 -90°，实现平躺在直线上
-                    let axisRotation = SCNMatrix4MakeRotation(-.pi / 2, direction.x, direction.y, direction.z)
-                    rotationMatrix = SCNMatrix4Mult(rotationMatrix, axisRotation)
                     sizePanel.transform = rotationMatrix
-                    
-                    let middlePosition = self.midPointBetween(start, end)
                     sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
-
+                    
+                    // 确保文字正向显示
+//                    let forwardVector = SCNVector3(0, 0, 1)//世界坐标系参考方向
+//                   // 如果直线可能出现在其他象限（不仅仅在 X 轴正方向或负方向），也可以考虑基于完整的方向向量来判断，而非仅依赖 direction.x
+//                    let dotProduct = direction.x * forwardVector.x + direction.z * forwardVector.z
+//                    if dotProduct < 0 {
+//                        sizePanel.eulerAngles.y += .pi
+//                    }
+                    if direction.x < 0 {
+                        sizePanel.eulerAngles.y += .pi // 翻转文字方向
+                    }
+                    
                     self.currentLabelNode = sizePanel
                     node.addChildNode(sizePanel)
                 }
