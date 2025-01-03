@@ -8,12 +8,28 @@
 import SceneKit
 
 
+public struct LineConstants {
+    // 单位 m
+    // 虚线段（球体）的直径
+    static let dashLineThickness: CGFloat = 0.005
+    // 下面两个值控制密度
+    static let segmentLength: CGFloat = 0.01
+    static let spaceLength: CGFloat = 0.005
+    static let lineThickness: CGFloat = 0.004
+}
+
+private struct SizePanel {
+    static let name: String = "SizePanel"
+    static let width: CGFloat = 0.1
+    static let height: CGFloat = 0.05
+}
+
 class DashLineManager {
     
     public var currentLabelNode: SCNNode?
     
     // MARK: - 创建虚线（球体）
-    func createDashedLine(start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) -> SCNNode {
+    private func createDashedLine(start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) -> SCNNode {
         let totalDistance = distanceBetween(start, end)
         let direction = normalize(vector: end - start)
         
@@ -38,12 +54,12 @@ class DashLineManager {
     }
     
     // MARK: - 更新虚线
-    func updateDashedLine(node: SCNNode, start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) {
+    public func updateDashedLine(node: SCNNode, start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) {
         DispatchQueue.global(qos: .userInitiated).async {
             let newLine = self.createDashedLine(start: start, end: end, color: color, thickness: thickness, segmentLength: segmentLength, spaceLength: spaceLength)
             DispatchQueue.main.async {
                 node.childNodes.forEach {
-                    if $0.name != "SizePanel" {
+                    if $0.name != SizePanel.name {
                         $0.removeFromParentNode()
                     }
                 }
@@ -62,18 +78,18 @@ class DashLineManager {
                 
                 // 添加或更新尺寸面板
                 let roundedDistance = Int(self.distanceBetween(start, end) * 100)
-                if let sizePanel = node.childNode(withName: "SizePanel", recursively: false) {
+                if let sizePanel = node.childNode(withName: SizePanel.name, recursively: false) {
                     self.updateLabelNode(text: "\(roundedDistance) cm")
                     sizePanel.transform = rotationMatrix
-                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
+                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0), z: middlePosition.z)
                     if direction.x < 0 {
                         sizePanel.eulerAngles.y += .pi // 翻转文字方向
                     }
                 } else {
-                    let sizePanel = self.createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
-                    sizePanel.name = "SizePanel"
+                    let sizePanel = self.createLabelNode(text: "\(roundedDistance) cm", width: SizePanel.width, height: SizePanel.height)
+                    sizePanel.name = SizePanel.name
                     sizePanel.transform = rotationMatrix
-                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
+                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0), z: middlePosition.z)
                     if direction.x < 0 {
                         sizePanel.eulerAngles.y += .pi // 翻转文字方向
                     }

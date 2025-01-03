@@ -51,6 +51,7 @@ class ARSceneController: UIViewController {
     // 2. 每个线段的起始点和终点位置（测距离）
     private var allSidePoints: [SCNVector3] = [] {
         didSet {
+            addVibrationEffect()
             switch drawMode {
             case .line:
                 // 测距离模式，结束绘制后，把直线的两头作为可吸附的 node
@@ -100,7 +101,6 @@ class ARSceneController: UIViewController {
         setupSceneView()
         setupCoachingOverlay()
         
-        // Set up scene content.
         sceneView.scene.rootNode.addChildNode(focusSquare)
     }
     
@@ -189,7 +189,6 @@ class ARSceneController: UIViewController {
             //statusViewController.scheduleMessage("TRY MOVING LEFT OR RIGHT", inSeconds: 5.0, messageType: .focusSquare)
         }
         
-        // Perform ray casting only when ARKit tracking is in a good state.
         if let camera = session.currentFrame?.camera, case .normal = camera.trackingState,
             let query = sceneView.getRaycastQuery(),
             let result = sceneView.castRay(for: query).first {
@@ -303,7 +302,7 @@ class ARSceneController: UIViewController {
                     point1: previousPoint,
                     point2: lastPoint,
                     color: .systemGreen,
-                    thickness: 0.004
+                    thickness: LineConstants.lineThickness
                 )
                 // 添加尺寸显示面板
                 addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
@@ -345,7 +344,7 @@ class ARSceneController: UIViewController {
                         point1: previousPoint,
                         point2: lastPoint,
                         color: .systemGreen,
-                        thickness: 0.004
+                        thickness: LineConstants.lineThickness
                     )
                     // 添加尺寸显示面板
                     addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
@@ -363,7 +362,7 @@ class ARSceneController: UIViewController {
                         point1: previousPoint,
                         point2: lastPoint,
                         color: .systemGreen,
-                        thickness: 0.004
+                        thickness: LineConstants.lineThickness
                     )
                     // 添加尺寸显示面板
                     addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
@@ -381,7 +380,7 @@ class ARSceneController: UIViewController {
                     point1: previousPoint,
                     point2: lastPoint,
                     color: .systemGreen,
-                    thickness: 0.004
+                    thickness: LineConstants.lineThickness
                 )
                 // 添加尺寸显示面板
                 addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
@@ -458,8 +457,7 @@ class ARSceneController: UIViewController {
         if !isAdsorption {
             adsorptionPoint = endpoint
             // 吸附到端点
-            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-            impactFeedback.impactOccurred()
+            addVibrationEffect()
             isAdsorption = true
             // 如果是绘制多边形，吸附到断点会默认把虚线绘制过去
             
@@ -474,9 +472,9 @@ class ARSceneController: UIViewController {
                         start: startLocation,
                         end: endpoint,
                         color: .white,
-                        thickness: 0.005,
-                        segmentLength: 0.01,
-                        spaceLength: 0.005
+                        thickness: LineConstants.dashLineThickness,
+                        segmentLength: LineConstants.segmentLength,
+                        spaceLength: LineConstants.spaceLength
                     )
                     self.endLocation = endpoint
                 }
@@ -539,6 +537,11 @@ class ARSceneController: UIViewController {
         
         return lineNode
     }
+    
+    private func addVibrationEffect() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
 }
 
 extension ARSceneController: ARSCNViewDelegate {
@@ -569,9 +572,9 @@ extension ARSceneController: ARSCNViewDelegate {
                         start: startLocation,
                         end: endLocation,
                         color: .white,
-                        thickness: 0.005,
-                        segmentLength: 0.01,
-                        spaceLength: 0.005
+                        thickness: LineConstants.dashLineThickness,
+                        segmentLength: LineConstants.segmentLength,
+                        spaceLength: LineConstants.spaceLength
                     )
                 }
             }
