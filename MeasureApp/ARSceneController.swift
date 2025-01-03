@@ -41,13 +41,17 @@ class ARSceneController: UIViewController {
     // 状态变量
     private var isDrawing = false
     private var startLocation: SCNVector3? // 起点
-    private var dashedLineNodes: [SCNNode] = [] // 当前绘制的虚线点
-    private var previousDashedLineNodes: [SCNNode] = [] // 前一个绘制的虚线点
+    private var endLocation: SCNVector3? // 终点
+    private let dashLineManager = DashLineManager() // 集成 LineManager
+    private var dashedLineNode: SCNNode? // 当前绘制的虚线
+//    private var dashedLineNodes: [SCNNode] = [] // 当前绘制的虚线点
+    private var previousDashedLineNode: SCNNode? // 前一个绘制的虚线点
     
     // 1. 每个线段的起始点位置（测面积）
     // 2. 每个线段的起始点和终点位置（测距离）
     private var allSidePoints: [SCNVector3] = [] {
         didSet {
+            addVibrationEffect()
             switch drawMode {
             case .line:
                 // 测距离模式，结束绘制后，把直线的两头作为可吸附的 node
@@ -63,7 +67,7 @@ class ARSceneController: UIViewController {
         }
     }
     
-    private var finishedDashedLines: [[SCNNode]] = [] // 已完成的虚线集合
+    private var finishedDashedLines: [SCNNode] = [] // 已完成的虚线集合
     private var lineEndPoints: [SCNVector3] = []
     
     private var drawMode: DrawMode = .line
@@ -75,7 +79,6 @@ class ARSceneController: UIViewController {
     private var startAdsorptionLocation: SCNVector3? // 从吸附点绘制的起点
     private var endAdsorptionLocation: SCNVector3? // 绘制过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
     private var allLineNodes: [SCNNode] = []
-    private var currentLabelNode: SCNNode?
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -84,18 +87,21 @@ class ARSceneController: UIViewController {
         button.setTitle("line", for: .normal)
         return button
     }()
+    
+    private lazy var doneButton: UIButton = {
+        let button = UIButton()
+        button.backgroundColor = UIColor.systemBlue;
+        button.addTarget(self, action: #selector(finish3DDraw), for: .touchUpInside)
+        button.setTitle("Done", for: .normal)
+        return button
+    }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
         setupSceneView()
         setupCoachingOverlay()
         
-        // Set up scene content.
         sceneView.scene.rootNode.addChildNode(focusSquare)
-        
-//        let labelNode = createLabelNode(text: "19 cm", width: 0.1, height: 0.05)
-//        labelNode.position = SCNVector3(0, 0, -0.2)
-//        sceneView.scene.rootNode.addChildNode(labelNode)
     }
     
     public override func viewWillAppear(_ animated: Bool) {
@@ -120,12 +126,18 @@ class ARSceneController: UIViewController {
         view.backgroundColor = .white
         view.addSubview(sceneView)
         
-        sceneView .addSubview(addObjectButton)
+        sceneView.addSubview(addObjectButton)
         addObjectButton.snp.makeConstraints { make in
             make.bottom.equalTo(sceneView).offset(-80)
             make.centerX.equalTo(sceneView)
             make.width.equalTo(80)
             make.height.equalTo(50)
+        }
+        
+        view.addSubview(doneButton)
+        doneButton.snp.makeConstraints { make in
+            make.top.bottom.width.equalTo(addObjectButton)
+            make.trailing.equalTo(view).offset(-20)
         }
         
         // tap to place object
@@ -151,10 +163,24 @@ class ARSceneController: UIViewController {
         coachingOverlay.goal = .anyPlane
     }
     
+    @objc
+    private func finish3DDraw() {
+        let renderResult = Render2DPolygonController()
+        renderResult.points3D = allSidePoints
+        renderResult.drawMode = drawMode
+        let navigationController = UINavigationController(rootViewController: renderResult)
+        navigationController.modalPresentationStyle = .fullScreen
+        present(navigationController, animated: true)
+        
+        lineEndPoints.removeAll()
+        allSidePoints.removeAll()
+        resetFocusSquareCenter(focusSquare: focusSquare)
+    }
+    
     
     // MARK: - Focus Square
 
-    func updateFocusSquare(isObjectVisible: Bool) {
+    private func updateFocusSquare(isObjectVisible: Bool) {
         if isObjectVisible || coachingOverlay.isActive {
             focusSquare.hide()
         } else {
@@ -163,7 +189,6 @@ class ARSceneController: UIViewController {
             //statusViewController.scheduleMessage("TRY MOVING LEFT OR RIGHT", inSeconds: 5.0, messageType: .focusSquare)
         }
         
-        // Perform ray casting only when ARKit tracking is in a good state.
         if let camera = session.currentFrame?.camera, case .normal = camera.trackingState,
             let query = sceneView.getRaycastQuery(),
             let result = sceneView.castRay(for: query).first {
@@ -213,9 +238,9 @@ class ARSceneController: UIViewController {
     
     private func finishPolygon() {
         finishDrawing()
-        lineEndPoints.removeAll()
-        allSidePoints.removeAll()
-        resetFocusSquareCenter(focusSquare: focusSquare)
+//        lineEndPoints.removeAll()
+//        allSidePoints.removeAll()
+//        resetFocusSquareCenter(focusSquare: focusSquare)
     }
     
     @objc
@@ -243,64 +268,64 @@ class ARSceneController: UIViewController {
     
     private func startDrawing() {
         isDrawing = true
-        currentLabelNode = nil
         guard let hitTestResult = sceneView.smartHitTest(sceneView.center) else { return }
         startLocation = SCNVector3(hitTestResult.worldTransform.translation)
         
         guard var startLocation = startLocation else { return }
-        var initialEndLocation = startLocation
 
         // 如果是吸附状态的话 用最后一个点当做起点
         if isAdsorption {
             if let lastPosition = adsorptionPoint {
                 startLocation = lastPosition
-                initialEndLocation = startLocation
                 startAdsorptionLocation = lastPosition
+                self.startLocation = lastPosition
             }
         }
         
         // 所有节点位置的集合
         allSidePoints.append(startLocation)
-        dashedLineNodes = createDashedLine(from: startLocation, to: initialEndLocation, interval: 0.01, radius: 0.002, color: .white)
-        
-        for node in dashedLineNodes {
-            sceneView.scene.rootNode.addChildNode(node)
+        dashedLineNode = SCNNode()
+        if let dashedLineNode = dashedLineNode {
+            sceneView.scene.rootNode.addChildNode(dashedLineNode)
         }
         
         if drawMode == .polygon {
+            if let dashedLineNode = dashedLineNode {
+                finishedDashedLines.append(dashedLineNode)
+            }
+            previousDashedLineNode?.removeFromParentNode()
             if allSidePoints.count >= 2 {
                 let lastPoint = allSidePoints[allSidePoints.count - 1]
                 let previousPoint = allSidePoints[allSidePoints.count - 2]
-                
-                for node in previousDashedLineNodes {
-                    node.removeFromParentNode()
-                }
-                previousDashedLineNodes.removeAll()
                 
                 let lineNode = createLineBetween(
                     point1: previousPoint,
                     point2: lastPoint,
                     color: .systemGreen,
-                    thickness: 0.004 // 默认的线宽
+                    thickness: LineConstants.lineThickness
                 )
+                // 添加尺寸显示面板
+                addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                 allLineNodes.append(lineNode)
                 sceneView.scene.rootNode.addChildNode(lineNode)
             }
         }
+        previousDashedLineNode = dashedLineNode
     }
 
     // 结束绘制虚线
     private func finishDrawing() {
         isDrawing = false
-        currentLabelNode = nil
         // 将当前虚线保存到已完成虚线集合
-        finishedDashedLines.append(dashedLineNodes)
+        if let dashedLineNode = dashedLineNode {
+            finishedDashedLines.append(dashedLineNode)
+        }
         
         // 结束点
-        if let lastNode = dashedLineNodes.last {
-            lineEndPoints.append(lastNode.position)
+        if let endLocation = endLocation {
+            lineEndPoints.append(endLocation)
             // 把所有的点加进 allSidePoints 里进行筛选操作
-            allSidePoints.append(lastNode.position)
+            allSidePoints.append(endLocation)
         }
         
         // 如果 allSidePoints.count 大于等于 2 ,那么最后一个点 n 和前一个点 n-1,绘制成直线
@@ -319,8 +344,10 @@ class ARSceneController: UIViewController {
                         point1: previousPoint,
                         point2: lastPoint,
                         color: .systemGreen,
-                        thickness: 0.004
+                        thickness: LineConstants.lineThickness
                     )
+                    // 添加尺寸显示面板
+                    addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                     allLineNodes.append(lineNode)
                     sceneView.scene.rootNode.addChildNode(lineNode)
                     
@@ -335,8 +362,10 @@ class ARSceneController: UIViewController {
                         point1: previousPoint,
                         point2: lastPoint,
                         color: .systemGreen,
-                        thickness: 0.004
+                        thickness: LineConstants.lineThickness
                     )
+                    // 添加尺寸显示面板
+                    addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                     allLineNodes.append(lineNode)
                     sceneView.scene.rootNode.addChildNode(lineNode)
                 }
@@ -351,116 +380,33 @@ class ARSceneController: UIViewController {
                     point1: previousPoint,
                     point2: lastPoint,
                     color: .systemGreen,
-                    thickness: 0.004
+                    thickness: LineConstants.lineThickness
                 )
+                // 添加尺寸显示面板
+                addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
                 allLineNodes.append(lineNode)
                 sceneView.scene.rootNode.addChildNode(lineNode)
             }
         }
     }
     
-    
-    // MARK: - 创建虚线起点
-    private func createDashedLine(from start: SCNVector3, to end: SCNVector3, interval: Float, radius: CGFloat, color: UIColor) -> [SCNNode] {
-        var nodes: [SCNNode] = []
-        let vector = SCNVector3(x: end.x - start.x, y: end.y - start.y, z: end.z - start.z)
-        let distance = sqrt(vector.x * vector.x + vector.y * vector.y + vector.z * vector.z)
+    private func addLabelNode(to lineNode: SCNNode, startPoint: SCNVector3, endPoint: SCNVector3) {
+        if let currentLabelNode = dashLineManager.currentLabelNode {
+            let middlePosition = dashLineManager.midPointBetween(startPoint, endPoint)
+            currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
+            lineNode.addChildNode(currentLabelNode)
+//            currentLabelNode.look(at: startPoint, up: sceneView.scene.rootNode.worldFront, localFront: SCNVector3(0, 1, 0))
 
-        guard distance > 0 else {
-            // 一开始 起点和终点相同的话只绘制一个点 起始点
-            let sphere = SCNSphere(radius: radius)
-            sphere.firstMaterial?.diffuse.contents = color
-            let sphereNode = SCNNode(geometry: sphere)
-            sphereNode.position = start
-            nodes.append(sphereNode)
-            return nodes
+            dashLineManager.currentLabelNode = nil
         }
-
-        let direction = vector.normalized()
-        var currentPosition = start
-
-        while (currentPosition - start).length() < distance {
-            let sphere = SCNSphere(radius: radius)
-            sphere.firstMaterial?.diffuse.contents = color
-            let sphereNode = SCNNode(geometry: sphere)
-            sphereNode.position = currentPosition
-            nodes.append(sphereNode)
-
-            // 按间隔更新位置
-            currentPosition.x += direction.x * interval
-            currentPosition.y += direction.y * interval
-            currentPosition.z += direction.z * interval
-        }
-
-        return nodes
-    }
-
-    // MARK: -  camera 移动的时候动态更新虚线
-    private func updateDashedLine(to endLocation: SCNVector3) {
-        guard var startLocation = startLocation else { return }
-        
-        // 计算起始点至当前点的距离
-        let currentDistance = endLocation.distance(to: startLocation)
-        let middlePosition = SCNVector3(
-            (startLocation.x + endLocation.x) / 2,
-            (startLocation.y + endLocation.y) / 2,
-            (startLocation.z + endLocation.z) / 2
-        )
-        
-        // 计算直线方向向量
-        let directionVector = SCNVector3(
-            endLocation.x - startLocation.x,
-            endLocation.y - startLocation.y,
-            endLocation.z - startLocation.z
-        )
-        let normalizedDirection = directionVector.normalized()
-        
-        let angleXZ = atan2(normalizedDirection.z, normalizedDirection.x)
-        var rotationMatrix = SCNMatrix4MakeRotation(-angleXZ, 0, 1, 0)
-
-        // 让面板围绕直线方向轴旋转 -90°，实现平躺在直线上
-        let axisRotation = SCNMatrix4MakeRotation(-.pi / 2, normalizedDirection.x, normalizedDirection.y, normalizedDirection.z)
-        rotationMatrix = SCNMatrix4Mult(rotationMatrix, axisRotation)
-        
-        
-        if currentDistance >= 0.1 {// 大于文字面板的宽度
-            let roundedDistance = Int(currentDistance * 100)
-            if let currentLabelNode = currentLabelNode {
-                updateLabelNode(text: "\(roundedDistance) cm")
-                currentLabelNode.transform = rotationMatrix
-                currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
-
-            } else {
-                let labelNode = createLabelNode(text: "\(roundedDistance) cm", width: 0.1, height: 0.05)
-                labelNode.transform = rotationMatrix
-                labelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
-                sceneView.scene.rootNode.addChildNode(labelNode)
-                currentLabelNode = labelNode
-            }
-        }
-        
-        // 如果是从吸附点开始绘制的 那么更新的时候虚线起点也是吸附点
-        if let startAdsorptionLocation = startAdsorptionLocation {
-            startLocation = startAdsorptionLocation
-        }
-        
-        // 1. 先清除旧虚线
-        clearDashedLine()
-
-        // 2. 创建新的虚线
-        dashedLineNodes = createDashedLine(from: startLocation, to: endLocation, interval: 0.01, radius: 0.002, color: .white)
-        for node in dashedLineNodes {
-            sceneView.scene.rootNode.addChildNode(node)
-        }
-        previousDashedLineNodes = dashedLineNodes
     }
     
     // MARK: - 清楚旧的虚线
     private func clearDashedLine() {
-        for node in dashedLineNodes {
-            node.removeFromParentNode()
-        }
-        dashedLineNodes.removeAll()
+        dashedLineNode?.removeFromParentNode()
+        previousDashedLineNode?.removeFromParentNode()
+        dashedLineNode = nil
+        previousDashedLineNode = nil
     }
     
     
@@ -511,8 +457,7 @@ class ARSceneController: UIViewController {
         if !isAdsorption {
             adsorptionPoint = endpoint
             // 吸附到端点
-            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-            impactFeedback.impactOccurred()
+            addVibrationEffect()
             isAdsorption = true
             // 如果是绘制多边形，吸附到断点会默认把虚线绘制过去
             
@@ -521,7 +466,18 @@ class ARSceneController: UIViewController {
                     // 绘制线过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
                     endAdsorptionLocation = endpoint
                 }
-                updateDashedLine(to: endpoint)
+                if let dashedLineNode = self.dashedLineNode, let startLocation = startLocation {
+                    self.dashLineManager.updateDashedLine(
+                        node: dashedLineNode,
+                        start: startLocation,
+                        end: endpoint,
+                        color: .white,
+                        thickness: LineConstants.dashLineThickness,
+                        segmentLength: LineConstants.segmentLength,
+                        spaceLength: LineConstants.spaceLength
+                    )
+                    self.endLocation = endpoint
+                }
             }
         }
     }
@@ -539,24 +495,16 @@ class ARSceneController: UIViewController {
     
     // MARK: - 创建实线
     private func createLineBetween(point1: SCNVector3, point2: SCNVector3, color: UIColor, thickness: CGFloat) -> SCNNode {
-        // 计算两点之间的向量
         let vector = point2 - point1
         let distance = vector.length()
         
-        // 创建圆柱体表示直线
         let cylinder = SCNCylinder(radius: thickness / 2, height: CGFloat(distance))
         cylinder.firstMaterial?.diffuse.contents = color
         
-        // 创建圆柱体节点
         let cylinderNode = SCNNode(geometry: cylinder)
-        
-        // 设置圆柱体的中心位置
         cylinderNode.position = (point1 + point2) / 2
-        
-        // 计算圆柱体的朝向
         cylinderNode.look(at: point2, up: sceneView.scene.rootNode.worldUp, localFront: SCNVector3(0, 1, 0))
         
-        // 创建线段的父节点
         let lineNode = SCNNode()
         lineNode.addChildNode(cylinderNode)
         
@@ -590,92 +538,10 @@ class ARSceneController: UIViewController {
         return lineNode
     }
     
-    // 创建尺寸显示面板
-    private func createLabelNode(text: String, width: CGFloat, height: CGFloat) -> SCNNode {
-        let plane = SCNPlane(width: width, height: height)
-        
-        // 这边 * 1000 是为了提高分辨率
-        let size = CGSize(width: width * 1000, height: height * 1000)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { ctx in
-            let rect = CGRect(origin: .zero, size: size)
-            ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(0.8).cgColor)
-            
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-            ctx.cgContext.addPath(path.cgPath)
-            ctx.cgContext.fillPath()
-            
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.alignment = .center
-            
-            let fontSize = size.height * 0.4
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: fontSize),
-                .foregroundColor: UIColor.black,
-                .paragraphStyle: paragraphStyle
-            ]
-            
-            let textSize = text.size(withAttributes: attributes)
-            let textRect = CGRect(
-                x: (size.width - textSize.width) / 2,  // 水平居中
-                y: (size.height - textSize.height) / 2, // 垂直居中
-                width: textSize.width,
-                height: textSize.height
-            )
-            
-            text.draw(in: textRect, withAttributes: attributes)
-        }
-        
-        plane.firstMaterial?.diffuse.contents = image
-        plane.firstMaterial?.isDoubleSided = true
-        
-        let planeNode = SCNNode(geometry: plane)
-        planeNode.renderingOrder = 100
-        
-        return planeNode
+    private func addVibrationEffect() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
     }
-    
-    private func updateLabelNode(text: String, alpha: CGFloat = 0.8) {
-        if let existingLabelNode = currentLabelNode,
-           let plane = existingLabelNode.geometry as? SCNPlane {
-            let width = plane.width
-            let height = plane.height
-            // 这边 * 1000 是为了提高分辨率
-            let size = CGSize(width: width * 1000, height: height * 1000)
-            let renderer = UIGraphicsImageRenderer(size: size)
-            let image = renderer.image { ctx in
-                let rect = CGRect(origin: .zero, size: size)
-                ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(alpha).cgColor)
-                
-                let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-                ctx.cgContext.addPath(path.cgPath)
-                ctx.cgContext.fillPath()
-                
-                let paragraphStyle = NSMutableParagraphStyle()
-                paragraphStyle.alignment = .center
-                
-                let fontSize = size.height * 0.4
-                let attributes: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: fontSize),
-                    .foregroundColor: UIColor.black,
-                    .paragraphStyle: paragraphStyle
-                ]
-                
-                let textSize = text.size(withAttributes: attributes)
-                let textRect = CGRect(
-                    x: (size.width - textSize.width) / 2,  // 水平居中
-                    y: (size.height - textSize.height) / 2, // 垂直居中
-                    width: textSize.width,
-                    height: textSize.height
-                )
-                
-                text.draw(in: textRect, withAttributes: attributes)
-            }
-            plane.firstMaterial?.diffuse.contents = image
-            plane.firstMaterial?.isDoubleSided = true
-        }
-    }
-
 }
 
 extension ARSceneController: ARSCNViewDelegate {
@@ -694,11 +560,23 @@ extension ARSceneController: ARSCNViewDelegate {
         
         DispatchQueue.main.async {
             let screenCenter = self.sceneView.screenCenter
-            guard let hitTestResult = self.sceneView.smartHitTest(screenCenter), !self.dashedLineNodes.isEmpty else { return }
+            guard let hitTestResult = self.sceneView.smartHitTest(screenCenter), self.dashedLineNode != nil else { return }
             let endLocation = SCNVector3(hitTestResult.worldTransform.translation)
             // 如果已经吸附了就不让他主动更新
             if !self.isAdsorption {
-                self.updateDashedLine(to: endLocation)
+//                self.updateDashedLine(to: endLocation)
+                if let dashedLineNode = self.dashedLineNode, let startLocation = self.startLocation {
+                    self.endLocation = endLocation
+                    self.dashLineManager.updateDashedLine(
+                        node: dashedLineNode,
+                        start: startLocation,
+                        end: endLocation,
+                        color: .white,
+                        thickness: LineConstants.dashLineThickness,
+                        segmentLength: LineConstants.segmentLength,
+                        spaceLength: LineConstants.spaceLength
+                    )
+                }
             }
             
         }
@@ -816,27 +694,3 @@ extension ARSCNView {
         return CGPoint(x: bounds.midX, y: bounds.midY)
     }
 }
-
-extension float4x4 {
-    var translation: SIMD3<Float> {
-        get {
-            let translation = columns.3
-            return [translation.x, translation.y, translation.z]
-        }
-        set(newValue) {
-            columns.3 = [newValue.x, newValue.y, newValue.z, columns.3.w]
-        }
-    }
-
-    var orientation: simd_quatf {
-        return simd_quaternion(self)
-    }
-
-    init(uniformScale scale: Float) {
-        self = matrix_identity_float4x4
-        columns.0.x = scale
-        columns.1.y = scale
-        columns.2.z = scale
-    }
-}
-

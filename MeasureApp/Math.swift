@@ -7,7 +7,7 @@
 
 import SceneKit
 
-extension SCNVector3 {
+extension SCNVector3: @retroactive Equatable {
     /// 计算向量的长度
     func length() -> Float {
         return sqrt(x * x + y * y + z * z)
@@ -79,6 +79,29 @@ extension SCNQuaternion {
             z: axis.z * sinHalfAngle,
             w: cos(halfAngle)
         )
+    }
+}
+
+extension float4x4 {
+    var translation: SIMD3<Float> {
+        get {
+            let translation = columns.3
+            return [translation.x, translation.y, translation.z]
+        }
+        set(newValue) {
+            columns.3 = [newValue.x, newValue.y, newValue.z, columns.3.w]
+        }
+    }
+
+    var orientation: simd_quatf {
+        return simd_quaternion(self)
+    }
+
+    init(uniformScale scale: Float) {
+        self = matrix_identity_float4x4
+        columns.0.x = scale
+        columns.1.y = scale
+        columns.2.z = scale
     }
 }
 
