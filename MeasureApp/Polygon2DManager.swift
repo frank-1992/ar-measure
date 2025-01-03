@@ -30,7 +30,7 @@ enum MeasurementUnit {
     }
 }
 
-private struct UIConstants {
+public struct UIConstants {
     static let labelWidth: CGFloat = 50.0
     static let labelHeight: CGFloat = 20.0
     static let circleRadius: CGFloat = 5.0
@@ -39,6 +39,8 @@ private struct UIConstants {
     static let lineWidth: CGFloat = 2.0
     static let verticalPadding: CGFloat = 80
     static let horizontalPadding: CGFloat = 20
+    static let maxScale: CGFloat = 2.0
+    static let minScale: CGFloat = 0.8
 }
 
 
@@ -56,21 +58,47 @@ class Polygon2DManager: NSObject {
     
     // 所有尺寸面板集合
     public var allSizeLabels: [UILabel: CGFloat] = [:]
+    // 最大的 rect
+    public var largestRect: CGRect = .zero
+    // 所有缩放点的集合
+    private var scaledPoints: [CGPoint] = [] {
+        didSet {
+            // 过滤最小和最大 x，最小 y 和最大 y,得到一个最大的 rect
+            guard !scaledPoints.isEmpty else {
+                largestRect = .zero
+                return
+            }
+            
+            // 过滤最小和最大 x，最小 y 和最大 y
+            let minX = scaledPoints.map { $0.x }.min() ?? 0
+            let maxX = scaledPoints.map { $0.x }.max() ?? 0
+            let minY = scaledPoints.map { $0.y }.min() ?? 0
+            let maxY = scaledPoints.map { $0.y }.max() ?? 0
+            
+            let width = maxX - minX
+            let height = maxY - minY
+            largestRect = CGRect(x: minX, y: minY, width: width, height: height)
+        }
+    }
+    
+    
     
     func render3DPolygonTo2D(
         points3D: [SCNVector3],
         planeOrigin: SCNVector3 = SCNVector3(0, 0, 0),
         planeNormal: SCNVector3 = SCNVector3(0, 1, 0),
-        uiView: UIView
+        uiView: UIView,
+        scale: CGFloat = 1.0
     ) {
         // 1. 将 3D 点投影到局部平面
         let projectedPoints = projectToPlane(points: points3D, planeOrigin: points3D[points3D.count - 1], normal: planeNormal)
         
         // 2. 等比缩放并居中到屏幕
         let scaledPoints = scaleAndCenterPoints(projectedPoints, in: uiView.bounds.size)
+        self.scaledPoints = scaledPoints
         
         // 3. 绘制 2D 图形
-        draw2DPolygonWithDistanceLabels(points3D: points3D, scaledPoints: scaledPoints, on: uiView)
+        draw2DPolygonWithDistanceLabels(points3D: points3D, scaledPoints: scaledPoints, on: uiView, scale: scale)
     }
     
     private func projectToPlane(points: [SCNVector3], planeOrigin: SCNVector3, normal: SCNVector3) -> [CGPoint] {
@@ -104,16 +132,16 @@ class Polygon2DManager: NSObject {
         // 计算等比缩放因子
         let scaleX = viewWidth / pointsWidth
         let scaleY = viewHeight / pointsHeight
-        let scale = min(scaleX, scaleY) // 保持等比缩放
+        let finalScale = min(scaleX, scaleY) // 保持等比缩放
         
         // 缩放并居中
-        let offsetX = (viewWidth - pointsWidth * scale) / 2
-        let offsetY = (viewHeight - pointsHeight * scale) / 2
+        let offsetX = (viewWidth - pointsWidth * finalScale) / 2
+        let offsetY = (viewHeight - pointsHeight * finalScale) / 2
         
         return points.map { point in
             CGPoint(
-                x: (point.x - minX) * scale + offsetX + UIConstants.horizontalPadding / 2.0,
-                y: (point.y - minY) * scale + offsetY + UIConstants.verticalPadding / 2.0
+                x: (point.x - minX) * finalScale + offsetX + UIConstants.horizontalPadding / 2.0,
+                y: (point.y - minY) * finalScale + offsetY + UIConstants.verticalPadding / 2.0
             )
         }
     }
@@ -122,7 +150,8 @@ class Polygon2DManager: NSObject {
     private func draw2DPolygonWithDistanceLabels(
         points3D: [SCNVector3],
         scaledPoints: [CGPoint],
-        on view: UIView
+        on view: UIView,
+        scale: CGFloat
     ) {
         guard points3D.count == scaledPoints.count, points3D.count > 1 else { return }
         
@@ -145,7 +174,7 @@ class Polygon2DManager: NSObject {
                     let end2D = scaledPoints[end]
                     // 计算 3D 距离
                     let distance = segment.start.distance(to: segment.end)
-                    drawLineWithMeasurements(from: start2D, to: end2D, distance: CGFloat(distance), on: view)
+                    drawLineWithMeasurements(from: start2D, to: end2D, distance: CGFloat(distance), on: view, scale: scale)
                 }
     
             }
@@ -157,7 +186,7 @@ class Polygon2DManager: NSObject {
                     let current3DPoint = points3D[i]
                     let next3DPoint = points3D[(i + 1) % points3D.count]
                     let distance = current3DPoint.distance(to: next3DPoint)
-                    drawLineWithMeasurements(from: current2DPoint, to: next2DPoint, distance: CGFloat(distance), on: view)
+                    drawLineWithMeasurements(from: current2DPoint, to: next2DPoint, distance: CGFloat(distance), on: view, scale: scale)
                 }
             }
         }
@@ -171,7 +200,8 @@ class Polygon2DManager: NSObject {
         from point1: CGPoint,
         to point2: CGPoint,
         distance: CGFloat,
-        on view: UIView
+        on view: UIView,
+        scale: CGFloat
     ) {
         // 1. 绘制线段
         let linePath = UIBezierPath()
@@ -181,20 +211,20 @@ class Polygon2DManager: NSObject {
         let lineLayer = CAShapeLayer()
         lineLayer.path = linePath.cgPath
         lineLayer.strokeColor = UIColor.systemGreen.cgColor
-        lineLayer.lineWidth = UIConstants.lineWidth
+        lineLayer.lineWidth = UIConstants.lineWidth / scale
         view.layer.addSublayer(lineLayer)
         
         // 2. 绘制两端的实心圆
-        drawSolidCircle(at: point1, on: view)
-        drawSolidCircle(at: point2, on: view)
+        drawSolidCircle(at: point1, on: view, scale: scale)
+        drawSolidCircle(at: point2, on: view, scale: scale)
         
         // 3. 添加尺寸标注面板
-        addMeasurementLabel(from: point1, to: point2, distance: distance, on: view)
+        addMeasurementLabel(from: point1, to: point2, distance: distance, on: view, scale: scale)
     }
     
     // 绘制实心圆
-    private func drawSolidCircle(at point: CGPoint, on view: UIView) {
-        let circleRadius = UIConstants.circleRadius
+    private func drawSolidCircle(at point: CGPoint, on view: UIView, scale: CGFloat) {
+        let circleRadius = UIConstants.circleRadius / scale
         let circlePath = UIBezierPath(
             arcCenter: point,
             radius: circleRadius,
@@ -214,7 +244,8 @@ class Polygon2DManager: NSObject {
         from point1: CGPoint,
         to point2: CGPoint,
         distance: CGFloat,
-        on view: UIView
+        on view: UIView,
+        scale: CGFloat
     ) {
         // 计算中点
         let midX = (point1.x + point2.x) / 2
@@ -222,18 +253,18 @@ class Polygon2DManager: NSObject {
         let midpoint = CGPoint(x: midX, y: midY)
         
         // 创建标注背景
-        let labelWidth: CGFloat = UIConstants.labelWidth
-        let labelHeight: CGFloat = UIConstants.labelHeight
+        let labelWidth = UIConstants.labelWidth / scale
+        let labelHeight = UIConstants.labelHeight / scale
         let labelBackground = UIView(frame: CGRect(x: 0, y: 0, width: labelWidth, height: labelHeight))
         labelBackground.center = midpoint
         labelBackground.backgroundColor = UIColor.systemGreen
-        labelBackground.layer.cornerRadius = UIConstants.labelHeight / 2.0
+        labelBackground.layer.cornerRadius = (UIConstants.labelHeight / 2.0) / scale
         view.addSubview(labelBackground)
         
         // 添加尺寸文本
         let distanceLabel = UILabel(frame: labelBackground.bounds)
         distanceLabel.text = measurementUnit.formattedValue(from: distance)
-        distanceLabel.font = UIFont.systemFont(ofSize: UIConstants.labelFontSize)
+        distanceLabel.font = UIFont.systemFont(ofSize: UIConstants.labelFontSize / scale)
         distanceLabel.textAlignment = .center
         distanceLabel.textColor = .white
         labelBackground.addSubview(distanceLabel)
@@ -251,6 +282,10 @@ class Polygon2DManager: NSObject {
         }
     }
     
-    
+    // 清空现有绘制内容
+    public func clearContent(in uiView: UIView) {
+        uiView.layer.sublayers?.removeAll()
+//        uiView.subviews.forEach { $0.removeFromSuperview() }
+    }
     
 }
