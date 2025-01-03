@@ -77,24 +77,33 @@ class DashLineManager {
                 let middlePosition = self.midPointBetween(start, end)
                 
                 // 添加或更新尺寸面板
-                let roundedDistance = Int(self.distanceBetween(start, end) * 100)
+                let distance = self.distanceBetween(start, end)
+                let roundedDistance = Int(distance * 100)
                 if let sizePanel = node.childNode(withName: SizePanel.name, recursively: false) {
-                    self.updateLabelNode(text: "\(roundedDistance) cm")
-                    sizePanel.transform = rotationMatrix
-                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0), z: middlePosition.z)
-                    if direction.x < 0 {
-                        sizePanel.eulerAngles.y += .pi // 翻转文字方向
+                    if distance >= SizePanel.width {
+                        sizePanel.isHidden = false
+                        self.updateLabelNode(text: "\(roundedDistance) cm")
+                        sizePanel.transform = rotationMatrix
+                        sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0), z: middlePosition.z)
+                        if direction.x < 0 {
+                            sizePanel.eulerAngles.y += .pi // 翻转文字方向
+                        }
+                    } else {
+                        sizePanel.isHidden = true
                     }
+                    
                 } else {
-                    let sizePanel = self.createLabelNode(text: "\(roundedDistance) cm", width: SizePanel.width, height: SizePanel.height)
-                    sizePanel.name = SizePanel.name
-                    sizePanel.transform = rotationMatrix
-                    sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0), z: middlePosition.z)
-                    if direction.x < 0 {
-                        sizePanel.eulerAngles.y += .pi // 翻转文字方向
+                    if distance >= SizePanel.width {
+                        let sizePanel = self.createLabelNode(text: "\(roundedDistance) cm", width: SizePanel.width, height: SizePanel.height)
+                        sizePanel.name = SizePanel.name
+                        sizePanel.transform = rotationMatrix
+                        sizePanel.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0), z: middlePosition.z)
+                        if direction.x < 0 {
+                            sizePanel.eulerAngles.y += .pi // 翻转文字方向
+                        }
+                        self.currentLabelNode = sizePanel
+                        node.addChildNode(sizePanel)
                     }
-                    self.currentLabelNode = sizePanel
-                    node.addChildNode(sizePanel)
                 }
             }
         }
