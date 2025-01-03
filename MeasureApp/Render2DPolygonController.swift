@@ -16,22 +16,20 @@ class Render2DPolygonController: UIViewController {
     
     public var drawMode: DrawMode = .line
     
+    private lazy var scrollView: UIScrollView = {
+        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 100, width: self.view.bounds.width, height: 400))
+        scrollView.backgroundColor = .systemBlue
+        scrollView.minimumZoomScale = 0.8
+        scrollView.maximumZoomScale = 2.0
+        scrollView.contentInsetAdjustmentBehavior = .never
+        return scrollView
+    }()
+    
     private lazy var contentView: UIView = {
         let view = UIView(frame: scrollView.bounds)
         view.backgroundColor = .systemPink
         return view
     }()
-    
-    private lazy var scrollView: UIScrollView = {
-        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 80, width: self.view.bounds.width, height: 400))
-        scrollView.backgroundColor = .systemBlue
-        scrollView.minimumZoomScale = 0.8
-        scrollView.maximumZoomScale = 2.0
-        return scrollView
-    }()
-    
-    private var contentCenter: CGPoint = .zero
-    private var contentSize: CGSize = .zero
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -76,8 +74,7 @@ extension Render2DPolygonController: UIScrollViewDelegate {
                                      y: scrollView.contentSize.height * 0.5 + offsetY)
         
         if scrollView.zoomScale <= 2.0 && scrollView.zoomScale >= 0.8 {
-            contentView.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-            contentView.subviews.forEach { $0.removeFromSuperview() }
+            polygon2DManager.clearContent(in: contentView)
             // 重新绘制 2D 图形，更新缩放比例
             polygon2DManager.render3DPolygonTo2D(
                 points3D: points3D,

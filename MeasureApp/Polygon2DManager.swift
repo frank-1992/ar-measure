@@ -58,32 +58,8 @@ class Polygon2DManager: NSObject {
     
     // 所有尺寸面板集合
     public var allSizeLabels: [UILabel: CGFloat] = [:]
-    // 最大的 rect
-    public var largestRect: CGRect = .zero
-    // 所有缩放点的集合
-    private var scaledPoints: [CGPoint] = [] {
-        didSet {
-            // 过滤最小和最大 x，最小 y 和最大 y,得到一个最大的 rect
-            guard !scaledPoints.isEmpty else {
-                largestRect = .zero
-                return
-            }
-            
-            // 过滤最小和最大 x，最小 y 和最大 y
-            let minX = scaledPoints.map { $0.x }.min() ?? 0
-            let maxX = scaledPoints.map { $0.x }.max() ?? 0
-            let minY = scaledPoints.map { $0.y }.min() ?? 0
-            let maxY = scaledPoints.map { $0.y }.max() ?? 0
-            
-            let width = maxX - minX
-            let height = maxY - minY
-            largestRect = CGRect(x: minX, y: minY, width: width, height: height)
-        }
-    }
     
-    
-    
-    func render3DPolygonTo2D(
+    public func render3DPolygonTo2D(
         points3D: [SCNVector3],
         planeOrigin: SCNVector3 = SCNVector3(0, 0, 0),
         planeNormal: SCNVector3 = SCNVector3(0, 1, 0),
@@ -95,7 +71,6 @@ class Polygon2DManager: NSObject {
         
         // 2. 等比缩放并居中到屏幕
         let scaledPoints = scaleAndCenterPoints(projectedPoints, in: uiView.bounds.size)
-        self.scaledPoints = scaledPoints
         
         // 3. 绘制 2D 图形
         draw2DPolygonWithDistanceLabels(points3D: points3D, scaledPoints: scaledPoints, on: uiView, scale: scale)
@@ -282,10 +257,9 @@ class Polygon2DManager: NSObject {
         }
     }
     
-    // 清空现有绘制内容
     public func clearContent(in uiView: UIView) {
         uiView.layer.sublayers?.removeAll()
-//        uiView.subviews.forEach { $0.removeFromSuperview() }
+        uiView.subviews.forEach { $0.removeFromSuperview() }
     }
     
 }
