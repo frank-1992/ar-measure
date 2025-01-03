@@ -8,6 +8,7 @@
 import UIKit
 import ARKit
 import SceneKit
+import AVFoundation
 
 enum DrawMode {
     case line
@@ -95,6 +96,15 @@ class ARSceneController: UIViewController {
         button.setTitle("Done", for: .normal)
         return button
     }()
+    
+    private lazy var torchButton: UIButton = {
+        let button = UIButton()
+        button.backgroundColor = UIColor.systemYellow;
+        button.addTarget(self, action: #selector(torchAction(_:)), for: .touchUpInside)
+        button.setTitle("Torch", for: .normal)
+        button.tag = 100
+        return button
+    }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -140,6 +150,14 @@ class ARSceneController: UIViewController {
             make.trailing.equalTo(view).offset(-20)
         }
         
+        sceneView.addSubview(torchButton)
+        torchButton.snp.makeConstraints { make in
+            make.trailing.equalTo(sceneView).offset(-20)
+            make.top.equalTo(sceneView).offset(80)
+            make.width.equalTo(80)
+            make.height.equalTo(50)
+        }
+        
         // tap to place object
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(tapAction(_:)))
         sceneView.addGestureRecognizer(tapGesture)
@@ -175,6 +193,19 @@ class ARSceneController: UIViewController {
         lineEndPoints.removeAll()
         allSidePoints.removeAll()
         resetFocusSquareCenter(focusSquare: focusSquare)
+    }
+    
+    @objc
+    private func torchAction(_ sender: UIButton) {
+        if sender.tag == 100 {
+            // 打开
+            toggleTorch(isOn: true)
+            sender.tag = 101
+        } else {
+            // 关闭
+            toggleTorch(isOn: false)
+            sender.tag = 100
+        }
     }
     
     
@@ -538,10 +569,33 @@ class ARSceneController: UIViewController {
         return lineNode
     }
     
+    // 添加震动
     private func addVibrationEffect() {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
     }
+
+    
+    // 手电筒功能
+    private func toggleTorch(isOn: Bool) {
+        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else {
+            print("Device does not support torch")
+            return
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            if isOn {
+                device.torchMode = .on
+            } else {
+                device.torchMode = .off
+            }
+            device.unlockForConfiguration()
+        } catch {
+            print("Torch could not be used: \(error.localizedDescription)")
+        }
+    }
+
 }
 
 extension ARSceneController: ARSCNViewDelegate {
