@@ -30,6 +30,17 @@ enum MeasurementUnit {
     }
 }
 
+private struct UIConstants {
+    static let labelWidth: CGFloat = 50.0
+    static let labelHeight: CGFloat = 20.0
+    static let circleRadius: CGFloat = 5.0
+    static let labelCornerRadius: CGFloat = 10.0
+    static let labelFontSize: CGFloat = 12.0
+    static let lineWidth: CGFloat = 2.0
+    static let verticalPadding: CGFloat = 80
+    static let horizontalPadding: CGFloat = 20
+}
+
 
 class Polygon2DManager: NSObject {
     
@@ -87,8 +98,8 @@ class Polygon2DManager: NSObject {
         let pointsWidth = maxX - minX
         let pointsHeight = maxY - minY
         
-        let viewWidth = viewSize.width - 20
-        let viewHeight = viewSize.height - 80
+        let viewWidth = viewSize.width - UIConstants.horizontalPadding
+        let viewHeight = viewSize.height - UIConstants.verticalPadding
         
         // 计算等比缩放因子
         let scaleX = viewWidth / pointsWidth
@@ -101,8 +112,8 @@ class Polygon2DManager: NSObject {
         
         return points.map { point in
             CGPoint(
-                x: (point.x - minX) * scale + offsetX + 10,
-                y: (point.y - minY) * scale + offsetY + 40
+                x: (point.x - minX) * scale + offsetX + UIConstants.horizontalPadding / 2.0,
+                y: (point.y - minY) * scale + offsetY + UIConstants.verticalPadding / 2.0
             )
         }
     }
@@ -170,7 +181,7 @@ class Polygon2DManager: NSObject {
         let lineLayer = CAShapeLayer()
         lineLayer.path = linePath.cgPath
         lineLayer.strokeColor = UIColor.systemGreen.cgColor
-        lineLayer.lineWidth = 2.0
+        lineLayer.lineWidth = UIConstants.lineWidth
         view.layer.addSublayer(lineLayer)
         
         // 2. 绘制两端的实心圆
@@ -183,7 +194,7 @@ class Polygon2DManager: NSObject {
     
     // 绘制实心圆
     private func drawSolidCircle(at point: CGPoint, on view: UIView) {
-        let circleRadius: CGFloat = 5.0 // 圆的半径
+        let circleRadius = UIConstants.circleRadius
         let circlePath = UIBezierPath(
             arcCenter: point,
             radius: circleRadius,
@@ -211,18 +222,18 @@ class Polygon2DManager: NSObject {
         let midpoint = CGPoint(x: midX, y: midY)
         
         // 创建标注背景
-        let labelWidth: CGFloat = 50.0
-        let labelHeight: CGFloat = 20.0
+        let labelWidth: CGFloat = UIConstants.labelWidth
+        let labelHeight: CGFloat = UIConstants.labelHeight
         let labelBackground = UIView(frame: CGRect(x: 0, y: 0, width: labelWidth, height: labelHeight))
         labelBackground.center = midpoint
         labelBackground.backgroundColor = UIColor.systemGreen
-        labelBackground.layer.cornerRadius = 10.0
+        labelBackground.layer.cornerRadius = UIConstants.labelHeight / 2.0
         view.addSubview(labelBackground)
         
         // 添加尺寸文本
         let distanceLabel = UILabel(frame: labelBackground.bounds)
         distanceLabel.text = measurementUnit.formattedValue(from: distance)
-        distanceLabel.font = UIFont.systemFont(ofSize: 12)
+        distanceLabel.font = UIFont.systemFont(ofSize: UIConstants.labelFontSize)
         distanceLabel.textAlignment = .center
         distanceLabel.textColor = .white
         labelBackground.addSubview(distanceLabel)

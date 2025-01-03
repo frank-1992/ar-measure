@@ -16,6 +16,8 @@ class Render2DPolygonController: UIViewController {
     
     public var drawMode: DrawMode = .line
     
+    private var currentScale: CGFloat = 1.0 // 当前缩放比例
+    
     private lazy var polygonView: UIView = {
         let view = UIView(frame: CGRect(x: 0, y: 100, width: self.view.bounds.size.width, height: 400))
         view.backgroundColor = .systemPink
@@ -32,6 +34,7 @@ class Render2DPolygonController: UIViewController {
         navigationItem.leftBarButtonItem = backButton
         
         view.addSubview(polygonView)
+        addPinchGesture(to: polygonView)
         
         if !points3D.isEmpty {
             polygon2DManager.drawMode = drawMode
@@ -48,5 +51,31 @@ class Render2DPolygonController: UIViewController {
     }
     
     
+    // 添加缩放手势
+    private
+    func addPinchGesture(to view: UIView) {
+        let pinchGesture = UIPinchGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        view.addGestureRecognizer(pinchGesture)
+    }
+    
+    // 处理缩放手势
+    @objc
+    private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
+//        guard let polygonView = gesture.view else { return }
+//        
+//        if gesture.state == .changed || gesture.state == .ended {
+//            // 更新缩放比例
+//            let scale = gesture.scale
+//            currentScale *= scale
+//            gesture.scale = 1.0
+//            
+//            // 清空现有绘制内容
+//            polygonView.layer.sublayers?.removeAll()
+//            polygonView.subviews.forEach { $0.removeFromSuperview() }
+//            
+//            // 按新缩放比例重新绘制
+//            polygon2DManager.render3DPolygonTo2D(points3D: points3D, uiView: polygonView, scale: currentScale)
+//        }
+    }
 
 }
