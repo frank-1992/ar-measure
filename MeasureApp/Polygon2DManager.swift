@@ -53,7 +53,7 @@ class Polygon2DManager: NSObject {
         uiView: UIView
     ) {
         // 1. 将 3D 点投影到局部平面
-        let projectedPoints = projectToPlane(points: points3D, planeOrigin: planeOrigin, normal: planeNormal)
+        let projectedPoints = projectToPlane(points: points3D, planeOrigin: points3D[points3D.count - 1], normal: planeNormal)
         
         // 2. 等比缩放并居中到屏幕
         let scaledPoints = scaleAndCenterPoints(projectedPoints, in: uiView.bounds.size)
