@@ -66,10 +66,10 @@ class Polygon2DManager: NSObject {
         uiView: UIView,
         scale: CGFloat = 1.0
     ) {
-        // 1. 将 3D 点投影到局部平面
+        // 1. 将 3D 点投影到局部平面(平面由一个原点 planeOrigin 和法向量 planeNormal 定义,使用点到平面的距离公式，将点调整到平面上)
         let projectedPoints = projectToPlane(points: points3D, planeOrigin: points3D[points3D.count - 1], normal: planeNormal)
         
-        // 2. 等比缩放并居中到屏幕
+        // 2. 等比缩放并居中到屏幕(计算点集的最小外接矩形,根据视图尺寸计算缩放因子，并应用缩放和位移)
         let scaledPoints = scaleAndCenterPoints(projectedPoints, in: uiView.bounds.size)
         
         // 3. 绘制 2D 图形
@@ -77,11 +77,20 @@ class Polygon2DManager: NSObject {
     }
     
     private func projectToPlane(points: [SCNVector3], planeOrigin: SCNVector3, normal: SCNVector3) -> [CGPoint] {
+        // 平面的法向量归一化 （将一个向量的长度调整为1，同时保持其方向不变。在此代码中，归一化的法向量用于后续计算（如点到平面的投影），这样可以避免因法向量的长度而引入的误差。）
+        /*
+         一个向量的模（长度）公式为：
+         m = 开根（x² + y² + z²）
+         归一化时，将向量的每个分量分别除以模，得到一个单位向量：
+         ​归一下向量 = (x/m， y/m，z/m)
+
+         */
         let normalLength = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z)
         let normalizedNormal = SCNVector3(normal.x / normalLength, normal.y / normalLength, normal.z / normalLength)
         
         return points.map { point in
             let vectorToPoint = SCNVector3(point.x - planeOrigin.x, point.y - planeOrigin.y, point.z - planeOrigin.z)
+            // 计算点到平面的距离，点到平面的距离是向量在法向量方向上的投影长度
             let distance = (vectorToPoint.x * normalizedNormal.x +
                             vectorToPoint.y * normalizedNormal.y +
                             vectorToPoint.z * normalizedNormal.z)
@@ -93,21 +102,24 @@ class Polygon2DManager: NSObject {
     }
     
     private func scaleAndCenterPoints(_ points: [CGPoint], in viewSize: CGSize) -> [CGPoint] {
+        // 计算点集的最小外接矩形
         guard let minX = points.map({ $0.x }).min(),
               let maxX = points.map({ $0.x }).max(),
               let minY = points.map({ $0.y }).min(),
               let maxY = points.map({ $0.y }).max() else { return [] }
         
+        // 1. 计算点集的宽高
         let pointsWidth = maxX - minX
         let pointsHeight = maxY - minY
         
+        // 2. 计算视图的宽高减去边距
         let viewWidth = viewSize.width - UIConstants.horizontalPadding
         let viewHeight = viewSize.height - UIConstants.verticalPadding
         
         // 计算等比缩放因子
         let scaleX = viewWidth / pointsWidth
         let scaleY = viewHeight / pointsHeight
-        let finalScale = min(scaleX, scaleY) // 保持等比缩放
+        let finalScale = min(scaleX, scaleY) // 取宽高的最小缩放比例，保持等比缩放。
         
         // 缩放并居中
         let offsetX = (viewWidth - pointsWidth * finalScale) / 2
