@@ -14,13 +14,13 @@ class Render2DPolygonController: UIViewController {
     
     public var points3D: [SCNVector3] = []
     
-    public var drawMode: DrawMode = .line
+    public var drawMode: MeasureMode = .distance
     
     private lazy var scrollView: UIScrollView = {
         let scrollView = UIScrollView(frame: CGRect(x: 0, y: 100, width: self.view.bounds.width, height: 400))
         scrollView.backgroundColor = .systemBlue
         scrollView.minimumZoomScale = 0.8
-        scrollView.maximumZoomScale = 2.0
+        scrollView.maximumZoomScale = 5.0
         scrollView.contentInsetAdjustmentBehavior = .never
         return scrollView
     }()

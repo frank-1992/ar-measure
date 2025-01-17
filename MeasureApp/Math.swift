@@ -138,3 +138,9 @@ extension UIColor {
 }
 
 
+extension SCNNode {
+    func removeSelf() {
+        self.childNodes.forEach { $0.removeFromParentNode() }
+        self.removeFromParentNode()
+    }
+}

@@ -9,10 +9,11 @@ import UIKit
 import ARKit
 import SceneKit
 import AVFoundation
+import SnapKit
 
-enum DrawMode {
-    case line
-    case polygon
+enum MeasureMode {
+    case distance
+    case area
 }
 
 class ARSceneController: UIViewController {
@@ -53,14 +54,14 @@ class ARSceneController: UIViewController {
     private var allSidePoints: [SCNVector3] = [] {
         didSet {
             addVibrationEffect()
-            switch drawMode {
-            case .line:
+            switch measureMode {
+            case .distance:
                 // 测距离模式，结束绘制后，把直线的两头作为可吸附的 node
                 if !isDrawing {
                     lineEndPoints.removeAll()
                     lineEndPoints.append(contentsOf: allSidePoints)
                 }
-            case .polygon:
+            case .area:
                 // 测面积模式，超过两条线段，则把第一个起始点作为可吸附的 node
                 guard allSidePoints.count >= 3, let firstPoint = allSidePoints.first else { return }
                 lineEndPoints.append(firstPoint)
@@ -71,7 +72,7 @@ class ARSceneController: UIViewController {
     private var finishedDashedLines: [SCNNode] = [] // 已完成的虚线集合
     private var lineEndPoints: [SCNVector3] = []
     
-    private var drawMode: DrawMode = .line
+    private var measureMode: MeasureMode = .distance
     
     
     // 是否已经吸附了，防止震动反馈多次
@@ -112,6 +113,7 @@ class ARSceneController: UIViewController {
         setupCoachingOverlay()
         
         sceneView.scene.rootNode.addChildNode(focusSquare)
+        dashLineManager.cameraNode = sceneView.pointOfView
     }
     
     public override func viewWillAppear(_ animated: Bool) {
@@ -185,7 +187,7 @@ class ARSceneController: UIViewController {
     private func finish3DDraw() {
         let renderResult = Render2DPolygonController()
         renderResult.points3D = allSidePoints
-        renderResult.drawMode = drawMode
+        renderResult.drawMode = measureMode
         let navigationController = UINavigationController(rootViewController: renderResult)
         navigationController.modalPresentationStyle = .fullScreen
         present(navigationController, animated: true)
@@ -246,11 +248,11 @@ class ARSceneController: UIViewController {
     
     @objc
     private func changeMode(sender: UIButton) {
-        if drawMode == .line {
-            drawMode = .polygon
+        if measureMode == .distance {
+            measureMode = .area
             sender.setTitle("polygon", for: .normal)
         } else {
-            drawMode = .line
+            measureMode = .distance
             sender.setTitle("line", for: .normal)
         }
         
@@ -277,7 +279,7 @@ class ARSceneController: UIViewController {
     @objc
     private func tapAction(_ gesture: UITapGestureRecognizer) {
         
-        if drawMode == .polygon {
+        if measureMode == .area {
             
             // 如果起始点和终点重合就停止绘制
             if isAdsorption {
@@ -320,25 +322,27 @@ class ARSceneController: UIViewController {
             sceneView.scene.rootNode.addChildNode(dashedLineNode)
         }
         
-        if drawMode == .polygon {
+        if measureMode == .area {
             if let dashedLineNode = dashedLineNode {
                 finishedDashedLines.append(dashedLineNode)
             }
             previousDashedLineNode?.removeFromParentNode()
             if allSidePoints.count >= 2 {
-                let lastPoint = allSidePoints[allSidePoints.count - 1]
+                 let lastPoint = allSidePoints[allSidePoints.count - 1]
                 let previousPoint = allSidePoints[allSidePoints.count - 2]
                 
-                let lineNode = createLineBetween(
-                    point1: previousPoint,
-                    point2: lastPoint,
-                    color: .systemGreen,
-                    thickness: LineConstants.lineThickness
-                )
-                // 添加尺寸显示面板
-                addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
-                allLineNodes.append(lineNode)
-                sceneView.scene.rootNode.addChildNode(lineNode)
+                if lastPoint != previousPoint {
+                    let lineNode = createLineBetween(
+                        point1: previousPoint,
+                        point2: lastPoint,
+                        color: .white,
+                        thickness: LineConstants.lineThickness
+                    )
+                    // 添加尺寸显示面板
+                    addLabelNode(to: lineNode, startPoint: previousPoint, endPoint: lastPoint)
+                    allLineNodes.append(lineNode)
+                    sceneView.scene.rootNode.addChildNode(lineNode)
+                }
             }
         }
         previousDashedLineNode = dashedLineNode
@@ -361,8 +365,8 @@ class ARSceneController: UIViewController {
         
         // 如果 allSidePoints.count 大于等于 2 ,那么最后一个点 n 和前一个点 n-1,绘制成直线
         if allSidePoints.count >= 2 {
-            switch drawMode {
-            case .line:
+            switch measureMode {
+            case .distance:
                 if let previousPoint = startAdsorptionLocation {
                     var lastPoint = allSidePoints[allSidePoints.count - 1]
                     // 如果结束画线的终点是在吸附点上就赋值吸附点的位置
@@ -374,7 +378,7 @@ class ARSceneController: UIViewController {
                     let lineNode = createLineBetween(
                         point1: previousPoint,
                         point2: lastPoint,
-                        color: .systemGreen,
+                        color: .white,
                         thickness: LineConstants.lineThickness
                     )
                     // 添加尺寸显示面板
@@ -392,7 +396,7 @@ class ARSceneController: UIViewController {
                     let lineNode = createLineBetween(
                         point1: previousPoint,
                         point2: lastPoint,
-                        color: .systemGreen,
+                        color: .white,
                         thickness: LineConstants.lineThickness
                     )
                     // 添加尺寸显示面板
@@ -401,7 +405,7 @@ class ARSceneController: UIViewController {
                     sceneView.scene.rootNode.addChildNode(lineNode)
                 }
                 
-            case .polygon:
+            case .area:
                 let lastPoint = allSidePoints[allSidePoints.count - 1]
                 let previousPoint = allSidePoints[allSidePoints.count - 2]
                 
@@ -410,7 +414,7 @@ class ARSceneController: UIViewController {
                 let lineNode = createLineBetween(
                     point1: previousPoint,
                     point2: lastPoint,
-                    color: .systemGreen,
+                    color: .white,
                     thickness: LineConstants.lineThickness
                 )
                 // 添加尺寸显示面板
@@ -420,8 +424,8 @@ class ARSceneController: UIViewController {
             }
         }
     }
-    
     private func addLabelNode(to lineNode: SCNNode, startPoint: SCNVector3, endPoint: SCNVector3) {
+        dashLineManager.setSizePanelTransparency(1.0)
         if let currentLabelNode = dashLineManager.currentLabelNode {
             let middlePosition = dashLineManager.midPointBetween(startPoint, endPoint)
             currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
@@ -434,8 +438,9 @@ class ARSceneController: UIViewController {
     
     // MARK: - 清楚旧的虚线
     private func clearDashedLine() {
-        dashedLineNode?.removeFromParentNode()
-        previousDashedLineNode?.removeFromParentNode()
+        dashedLineNode?.removeSelf()
+        previousDashedLineNode?.removeSelf()
+        
         dashedLineNode = nil
         previousDashedLineNode = nil
     }
@@ -493,11 +498,11 @@ class ARSceneController: UIViewController {
             // 如果是绘制多边形，吸附到断点会默认把虚线绘制过去
             
             if isDrawing {
-                if drawMode == .line {
+                if measureMode == .distance {
                     // 绘制线过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
                     endAdsorptionLocation = endpoint
                 }
-                if let dashedLineNode = self.dashedLineNode, let startLocation = startLocation {
+                if let dashedLineNode = self.dashedLineNode, let startLocation = startLocation, !dashedLineNode.isHidden {
                     self.dashLineManager.updateDashedLine(
                         node: dashedLineNode,
                         start: startLocation,
@@ -547,8 +552,8 @@ class ARSceneController: UIViewController {
         lineNode.addChildNode(sphereNode1)
 
         
-        switch drawMode {
-        case .line:
+        switch measureMode {
+        case .distance:
             if endAdsorptionLocation == nil {
                 let sphere2 = SCNSphere(radius: thickness * 1.5)
                 sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
@@ -556,7 +561,7 @@ class ARSceneController: UIViewController {
                 sphereNode2.position = point2
                 lineNode.addChildNode(sphereNode2)
             }
-        case .polygon:
+        case .area:
             if !isAdsorption {
                 let sphere2 = SCNSphere(radius: thickness * 1.5)
                 sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
@@ -613,13 +618,14 @@ extension ARSceneController: ARSCNViewDelegate {
         }
         
         DispatchQueue.main.async {
+            guard let dashedLineNode = self.dashedLineNode else { return }
+
             let screenCenter = self.sceneView.screenCenter
             guard let hitTestResult = self.sceneView.smartHitTest(screenCenter), self.dashedLineNode != nil else { return }
             let endLocation = SCNVector3(hitTestResult.worldTransform.translation)
             // 如果已经吸附了就不让他主动更新
             if !self.isAdsorption {
-//                self.updateDashedLine(to: endLocation)
-                if let dashedLineNode = self.dashedLineNode, let startLocation = self.startLocation {
+                if let startLocation = self.startLocation {
                     self.endLocation = endLocation
                     self.dashLineManager.updateDashedLine(
                         node: dashedLineNode,

@@ -46,7 +46,7 @@ public struct UIConstants {
 
 class Polygon2DManager: NSObject {
     
-    public var drawMode: DrawMode = .line
+    public var drawMode: MeasureMode = .distance
     
     public var measurementUnit: MeasurementUnit = .centimeters {
         didSet {
@@ -56,41 +56,95 @@ class Polygon2DManager: NSObject {
         }
     }
     
+    private(set) var area: Float = 0
+    private(set) var distance: Float = 0
+    
     // 所有尺寸面板集合
     public var allSizeLabels: [UILabel: CGFloat] = [:]
     
     public func render3DPolygonTo2D(
         points3D: [SCNVector3],
-        planeOrigin: SCNVector3 = SCNVector3(0, 0, 0),
-        planeNormal: SCNVector3 = SCNVector3(0, 1, 0),
         uiView: UIView,
         scale: CGFloat = 1.0
     ) {
         // 1. 将 3D 点投影到局部平面(平面由一个原点 planeOrigin 和法向量 planeNormal 定义,使用点到平面的距离公式，将点调整到平面上)
-        let projectedPoints = projectToPlane(points: points3D, planeOrigin: points3D[points3D.count - 1], normal: planeNormal)
+        var projectedPoints: [CGPoint] = []
+        switch drawMode {
+        case .distance:
+            projectedPoints = projectLineToPlane(points: points3D, planeOrigin: points3D[points3D.count - 1], normal: SCNVector3(0, 1, 0))
+        case .area:
+            projectedPoints =  projectVerticesTo2D(vertices: points3D)
+            area = calculateAreaFrom2DVertices(vertices: projectedPoints)
+        }
         
         // 2. 等比缩放并居中到屏幕(计算点集的最小外接矩形,根据视图尺寸计算缩放因子，并应用缩放和位移)
         let scaledPoints = scaleAndCenterPoints(projectedPoints, in: uiView.bounds.size)
+        
         
         // 3. 绘制 2D 图形
         draw2DPolygonWithDistanceLabels(points3D: points3D, scaledPoints: scaledPoints, on: uiView, scale: scale)
     }
     
-    private func projectToPlane(points: [SCNVector3], planeOrigin: SCNVector3, normal: SCNVector3) -> [CGPoint] {
-        // 平面的法向量归一化 （将一个向量的长度调整为1，同时保持其方向不变。在此代码中，归一化的法向量用于后续计算（如点到平面的投影），这样可以避免因法向量的长度而引入的误差。）
-        /*
-         一个向量的模（长度）公式为：
-         m = 开根（x² + y² + z²）
-         归一化时，将向量的每个分量分别除以模，得到一个单位向量：
-         ​归一下向量 = (x/m， y/m，z/m)
+    
+    // 获取投影后的 2D 坐标
+    private func projectVerticesTo2D(vertices: [SCNVector3]) -> [CGPoint] {
+        // 计算法向量
+        let normal = calculateNormal(vertices: vertices)
+        
+        // 选择投影平面
+        let projectionPlane = selectProjectionPlane(normal: normal)
+        
+        // 投影每个点到参考平面
+        return vertices.map { projectPoint($0, onto: projectionPlane) }
+    }
 
-         */
+    
+    // 计算法向量
+    private func calculateNormal(vertices: [SCNVector3]) -> SCNVector3 {
+        let v1 = vertices[1] - vertices[0]
+        let v2 = vertices[2] - vertices[0]
+        return v1.cross(v2).normalized()
+    }
+    
+    // 选择参考平面（最大法向量分量）
+    private func selectProjectionPlane(normal: SCNVector3) -> (x: Int, y: Int) {
+        if abs(normal.x) > abs(normal.y) && abs(normal.x) > abs(normal.z) {
+            return (1, 2) // YZ 平面
+        } else if abs(normal.y) > abs(normal.z) {
+            return (0, 2) // XZ 平面
+        } else {
+            return (0, 1) // XY 平面
+        }
+    }
+    
+    // 将点投影到指定平面
+    private func projectPoint(_ point: SCNVector3, onto plane: (x: Int, y: Int)) -> CGPoint {
+        let coordinates = [point.x, point.y, point.z]
+        return CGPoint(x: CGFloat(coordinates[plane.x]), y: CGFloat(coordinates[plane.y]))
+    }
+    
+    
+    // 根据投影点计算 2D 多边形面积
+    private func calculateAreaFrom2DVertices(vertices: [CGPoint]) -> Float {
+        var area: Float = 0
+        let count = vertices.count
+        for i in 0..<count {
+            let current = vertices[i]
+            let next = vertices[(i + 1) % count]
+            area += Float((current.x * next.y - current.y * next.x))
+        }
+        return abs(area) / 2
+    }
+    
+    
+    
+    
+    private func projectLineToPlane(points: [SCNVector3], planeOrigin: SCNVector3, normal: SCNVector3) -> [CGPoint] {
         let normalLength = sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z)
         let normalizedNormal = SCNVector3(normal.x / normalLength, normal.y / normalLength, normal.z / normalLength)
         
         return points.map { point in
             let vectorToPoint = SCNVector3(point.x - planeOrigin.x, point.y - planeOrigin.y, point.z - planeOrigin.z)
-            // 计算点到平面的距离，点到平面的距离是向量在法向量方向上的投影长度
             let distance = (vectorToPoint.x * normalizedNormal.x +
                             vectorToPoint.y * normalizedNormal.y +
                             vectorToPoint.z * normalizedNormal.z)
@@ -146,7 +200,7 @@ class Polygon2DManager: NSObject {
         path.move(to: scaledPoints.first!)
         
         switch drawMode {
-        case .line:
+        case .distance:
             // 将点两两分组，并存入数组
             var lineSegments: [(start: SCNVector3, end: SCNVector3)] = []
             for i in stride(from: 0, to: points3D.count - 1, by: 2) {
@@ -161,11 +215,12 @@ class Polygon2DManager: NSObject {
                     let end2D = scaledPoints[end]
                     // 计算 3D 距离
                     let distance = segment.start.distance(to: segment.end)
+                    self.distance += distance
                     drawLineWithMeasurements(from: start2D, to: end2D, distance: CGFloat(distance), on: view, scale: scale)
                 }
     
             }
-        case .polygon:
+        case .area:
             for i in 0..<points3D.count {
                 let current2DPoint = scaledPoints[i]
                 let next2DPoint = scaledPoints[(i + 1) % scaledPoints.count]
