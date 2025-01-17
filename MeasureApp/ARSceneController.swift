@@ -113,7 +113,7 @@ class ARSceneController: UIViewController {
         setupCoachingOverlay()
         
         sceneView.scene.rootNode.addChildNode(focusSquare)
-        dashLineManager.cameraNode = sceneView.pointOfView
+        dashLineManager.rootNode = sceneView.scene.rootNode
     }
     
     public override func viewWillAppear(_ animated: Bool) {
@@ -426,13 +426,13 @@ class ARSceneController: UIViewController {
     }
     private func addLabelNode(to lineNode: SCNNode, startPoint: SCNVector3, endPoint: SCNVector3) {
         dashLineManager.setSizePanelTransparency(1.0)
-        if let currentLabelNode = dashLineManager.currentLabelNode {
+        if let currentLabelNode = dashLineManager.currentSizePanel {
             let middlePosition = dashLineManager.midPointBetween(startPoint, endPoint)
             currentLabelNode.position = SCNVector3(x: middlePosition.x, y: middlePosition.y + 0.0025, z: middlePosition.z)
             lineNode.addChildNode(currentLabelNode)
 //            currentLabelNode.look(at: startPoint, up: sceneView.scene.rootNode.worldFront, localFront: SCNVector3(0, 1, 0))
 
-            dashLineManager.currentLabelNode = nil
+            dashLineManager.currentSizePanel = nil
         }
     }
     
