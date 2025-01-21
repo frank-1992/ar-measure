@@ -114,6 +114,7 @@ class ARSceneController: UIViewController {
         
         sceneView.scene.rootNode.addChildNode(focusSquare)
         dashLineManager.rootNode = sceneView.scene.rootNode
+        dashLineManager.cameraNode = sceneView.pointOfView
     }
     
     public override func viewWillAppear(_ animated: Bool) {

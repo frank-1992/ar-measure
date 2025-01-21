@@ -27,6 +27,8 @@ class DashLineManager {
     private var sphereNodes: [SCNNode] = []
 
     public var rootNode: SCNNode?
+    public var cameraNode: SCNNode?
+
     
     // MARK: - 更新虚线
     public func updateDashedLine(node: SCNNode, start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) {
@@ -62,6 +64,14 @@ class DashLineManager {
                 let middlePosition = self.midPointBetween(start, end)
                 let distance = self.distanceBetween(start, end)
                 let roundedDistance = Int(distance * 100)
+                
+                let cameraPosition = self.cameraNode?.position ?? SCNVector3Zero
+                let cameraDirection = self.cameraNode?.worldFront ?? SCNVector3Zero
+
+                let middleToCamera = (cameraPosition - middlePosition).normalized()
+                let shouldRotate = middleToCamera.dot(lineDirection) < 0
+
+
                 print("lineDirection: \(lineDirection.z)")
                 // 添加或更新尺寸面板
                 if let currentSizePanel = self.currentSizePanel, let planeNode = currentSizePanel.childNode(withName: SizePanel.name, recursively: false), let plane = planeNode.geometry as? SCNPlane {
@@ -71,7 +81,7 @@ class DashLineManager {
                         currentSizePanel.position = SCNVector3(x: middlePosition.x,
                                                         y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0),
                                                         z: middlePosition.z)
-                        self.updateLabelNode(plane: plane, text: "\(roundedDistance) cm", rotated: lineDirection.z < 0 ? true : false)
+                        self.updateLabelNode(plane: plane, text: "\(roundedDistance) cm", rotated: shouldRotate)
                     } else {
                         currentSizePanel.isHidden = true
                     }
