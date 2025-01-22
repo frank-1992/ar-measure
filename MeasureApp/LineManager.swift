@@ -66,13 +66,11 @@ class DashLineManager {
                 let roundedDistance = Int(distance * 100)
                 
                 let cameraPosition = self.cameraNode?.position ?? SCNVector3Zero
-                let cameraDirection = self.cameraNode?.worldFront ?? SCNVector3Zero
 
                 let middleToCamera = (cameraPosition - middlePosition).normalized()
                 let shouldRotate = middleToCamera.dot(lineDirection) < 0
 
 
-                print("lineDirection: \(lineDirection.z)")
                 // 添加或更新尺寸面板
                 if let currentSizePanel = self.currentSizePanel, let planeNode = currentSizePanel.childNode(withName: SizePanel.name, recursively: false), let plane = planeNode.geometry as? SCNPlane {
                     if distance >= plane.width {

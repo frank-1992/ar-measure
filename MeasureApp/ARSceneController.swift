@@ -80,7 +80,7 @@ class ARSceneController: UIViewController {
     private var adsorptionPoint: SCNVector3? //当前动态判断的吸附点坐标 超过距离就为 nil
     private var startAdsorptionLocation: SCNVector3? // 从吸附点绘制的起点
     private var endAdsorptionLocation: SCNVector3? // 绘制过程中吸附到的点的位置，如果结束绘制，那么终点就是吸附点，并且不需要创建 endSphere，只需要画直线
-    private var allLineNodes: [SCNNode] = []
+    private var allLineNodes: [LineNode] = []
     
     private lazy var addObjectButton: UIButton = {
         let button = UIButton()
@@ -531,23 +531,12 @@ class ARSceneController: UIViewController {
     }
     
     // MARK: - 创建实线
-    private func createLineBetween(point1: SCNVector3, point2: SCNVector3, color: UIColor, thickness: CGFloat) -> SCNNode {
-        let vector = point2 - point1
-        let distance = vector.length()
-        
-        let cylinder = SCNCylinder(radius: thickness / 2, height: CGFloat(distance))
-        cylinder.firstMaterial?.diffuse.contents = color
-        
-        let cylinderNode = SCNNode(geometry: cylinder)
-        cylinderNode.position = (point1 + point2) / 2
-        cylinderNode.look(at: point2, up: sceneView.scene.rootNode.worldUp, localFront: SCNVector3(0, 1, 0))
-        
-        let lineNode = SCNNode()
-        lineNode.addChildNode(cylinderNode)
+    private func createLineBetween(point1: SCNVector3, point2: SCNVector3, color: UIColor, thickness: CGFloat) -> LineNode {
+        let lineNode = LineNode(start: point1, end: point2, color: color, thickness: thickness)
         
         // 创建起点和终点球体
-        let sphere1 = SCNSphere(radius: thickness * 1.5)
-        sphere1.firstMaterial?.diffuse.contents = UIColor.white // 起点颜色
+        let sphere1 = SCNSphere(radius: thickness * 1.7)
+        sphere1.firstMaterial?.diffuse.contents = UIColor.white
         let sphereNode1 = SCNNode(geometry: sphere1)
         sphereNode1.position = point1
         lineNode.addChildNode(sphereNode1)
@@ -556,16 +545,16 @@ class ARSceneController: UIViewController {
         switch measureMode {
         case .distance:
             if endAdsorptionLocation == nil {
-                let sphere2 = SCNSphere(radius: thickness * 1.5)
-                sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
+                let sphere2 = SCNSphere(radius: thickness * 1.7)
+                sphere2.firstMaterial?.diffuse.contents = UIColor.white
                 let sphereNode2 = SCNNode(geometry: sphere2)
                 sphereNode2.position = point2
                 lineNode.addChildNode(sphereNode2)
             }
         case .area:
             if !isAdsorption {
-                let sphere2 = SCNSphere(radius: thickness * 1.5)
-                sphere2.firstMaterial?.diffuse.contents = UIColor.white // 终点颜色
+                let sphere2 = SCNSphere(radius: thickness * 1.7)
+                sphere2.firstMaterial?.diffuse.contents = UIColor.white
                 let sphereNode2 = SCNNode(geometry: sphere2)
                 sphereNode2.position = point2
                 lineNode.addChildNode(sphereNode2)
