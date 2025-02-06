@@ -1,18 +1,24 @@
+//
+//  LineManager.swift
+//  MeasureApp
+//
+//  Created by 吴熠 on 2024/12/31.
+//
+
 import SceneKit
 import ARKit
-
 
 public struct LineConstants {
     // 单位 m
     // 虚线段（球体）的直径
-    static let dashLineThickness: CGFloat = 0.003
+    static let dashLineThickness: CGFloat = 0.004
     // 下面两个值控制密度
-    static let segmentLength: CGFloat = 0.01
+    static let segmentLength: CGFloat = 0.005
     static let spaceLength: CGFloat = 0.005
     static let lineThickness: CGFloat = 0.003
 }
 
-private struct SizePanel {
+public struct SizePanel {
     static let name: String = "SizePanel"
     static let width: CGFloat = 0.08
     static let height: CGFloat = 0.04
@@ -21,14 +27,13 @@ private struct SizePanel {
 }
 
 class DashLineManager {
-    public var currentSizePanel: SCNNode?
+    public var currentSizePanel: SizePanelNode?
     
     // 预先创建的小球节点数组
     private var sphereNodes: [SCNNode] = []
 
     public var rootNode: SCNNode?
     public var cameraNode: SCNNode?
-
     
     // MARK: - 更新虚线
     public func updateDashedLine(node: SCNNode, start: SCNVector3, end: SCNVector3, color: UIColor, thickness: CGFloat, segmentLength: CGFloat, spaceLength: CGFloat) {
@@ -60,42 +65,37 @@ class DashLineManager {
                     }
                 }
                 
-                let lineDirection = (end - start).normalized()
+                let lineDirection = (start - end).normalized()
                 let middlePosition = self.midPointBetween(start, end)
                 let distance = self.distanceBetween(start, end)
                 let roundedDistance = Int(distance * 100)
                 
                 let cameraPosition = self.cameraNode?.position ?? SCNVector3Zero
-
-                let middleToCamera = (cameraPosition - middlePosition).normalized()
-                let shouldRotate = middleToCamera.dot(lineDirection) < 0
-
-
+                
+                let angle = atan2(lineDirection.z, lineDirection.x) * 180 / .pi
+                let shouldFlip = (angle < 90 && angle > -90)
+                
                 // 添加或更新尺寸面板
-                if let currentSizePanel = self.currentSizePanel, let planeNode = currentSizePanel.childNode(withName: SizePanel.name, recursively: false), let plane = planeNode.geometry as? SCNPlane {
-                    if distance >= plane.width {
+                if let currentSizePanel = self.currentSizePanel {
+                    if distance >= SizePanel.width {
                         currentSizePanel.isHidden = false
-                        self.adjustPanelNodeRotation(sizePanel: currentSizePanel, start: start, end: end)
+                        self.adjustPanelNodeRotation(sizePanel: currentSizePanel, start: start, end: end, cameraPosition: cameraPosition)
                         currentSizePanel.position = SCNVector3(x: middlePosition.x,
-                                                        y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0),
+                                                        y: middlePosition.y,
                                                         z: middlePosition.z)
-                        self.updateLabelNode(plane: plane, text: "\(roundedDistance) cm", rotated: shouldRotate)
+                        currentSizePanel.updateText(text: "\(roundedDistance) cm", shouldRotate: shouldFlip)
                     } else {
                         currentSizePanel.isHidden = true
                     }
                 } else {
                     if distance >= SizePanel.width {
-                        let sizePanel = SCNNode()
-                        sizePanel.eulerAngles = SCNVector3(0, 0, 0)
-                        let planeNode = self.createLabelNode(text: "\(roundedDistance) cm", width: SizePanel.width, height: SizePanel.height)
-                        planeNode.name = SizePanel.name
-                        sizePanel.addChildNode(planeNode)
-                        self.adjustPanelNodeRotation(sizePanel: sizePanel, start: start, end: end)
-                        sizePanel.position = SCNVector3(x: middlePosition.x,
-                                                        y: middlePosition.y + Float(LineConstants.dashLineThickness / 2.0),
+                        let planeNode = SizePanelNode(width: SizePanel.width, height: SizePanel.height, text: "\(roundedDistance) cm")
+                        self.adjustPanelNodeRotation(sizePanel: planeNode, start: start, end: end, cameraPosition: cameraPosition)
+                        planeNode.position = SCNVector3(x: middlePosition.x,
+                                                        y: middlePosition.y,
                                                         z: middlePosition.z)
-                        self.currentSizePanel = sizePanel
-                        self.rootNode?.addChildNode(sizePanel)
+                        self.currentSizePanel = planeNode
+                        self.rootNode?.addChildNode(planeNode)
                     }
                 }
             }
@@ -115,7 +115,7 @@ class DashLineManager {
     private func adjustSphereNodes(count: Int, color: UIColor, thickness: CGFloat) {
         // 检测 sphereNodes 数组中的 sphereNode 是否已经从场景中移除
         sphereNodes = sphereNodes.filter { sphereNode in
-            return sphereNode.parent != nil
+            return sphereNode.parent != nil && sphereNode.parent?.parent != nil
         }
         
         while sphereNodes.count < count {
@@ -129,117 +129,29 @@ class DashLineManager {
         }
     }
     
-    private func adjustPanelNodeRotation(sizePanel: SCNNode, start: SCNVector3, end: SCNVector3) {
-        let middlePosition = midPointBetween(start, end)
+    
+    public func adjustPanelNodeRotation(sizePanel: SCNNode, start: SCNVector3, end: SCNVector3, cameraPosition: SCNVector3) {
         let lineDirection = (end - start).normalized()
-        let lookAtTarget = middlePosition + lineDirection
-        sizePanel.look(at: lookAtTarget, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, 1))
-    }
-    
-    // MARK: - 创建尺寸显示面板
-    private func createLabelNode(text: String, width: CGFloat, height: CGFloat) -> SCNNode {
-        let plane = SCNPlane(width: width, height: height)
+        let panelNormal = lineDirection.cross(cameraPosition - start).normalized()
+        let panelUp = panelNormal.cross(lineDirection).normalized()
         
-        // 这边 * 2000 是为了提高分辨率
-        let size = CGSize(width: width * 2000, height: height * 2000)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let image = renderer.image { ctx in
-            let rect = CGRect(origin: .zero, size: size)
-            ctx.cgContext.setFillColor(UIColor.white.withAlphaComponent(1.0).cgColor)
-            
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-            ctx.cgContext.addPath(path.cgPath)
-            ctx.cgContext.fillPath()
-            
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.alignment = .center
-            
-            let fontSize = size.height * 0.5
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: fontSize, weight: .medium),
-                .foregroundColor: UIColor.black,
-                .paragraphStyle: paragraphStyle
-            ]
-            
-            let textSize = text.size(withAttributes: attributes)
-            let textRect = CGRect(
-                x: (size.width - textSize.width) / 2,  // 水平居中
-                y: (size.height - textSize.height) / 2, // 垂直居中
-                width: textSize.width,
-                height: textSize.height
-            )
-            
-            text.draw(in: textRect, withAttributes: attributes)
-        }
+        var transform = sizePanel.transform
+        transform.m11 = lineDirection.x
+        transform.m12 = lineDirection.y
+        transform.m13 = lineDirection.z
+        transform.m21 = panelUp.x
+        transform.m22 = panelUp.y
+        transform.m23 = panelUp.z
+        transform.m31 = panelNormal.x
+        transform.m32 = panelNormal.y
+        transform.m33 = panelNormal.z
         
-        plane.firstMaterial?.diffuse.contents = image
-        plane.firstMaterial?.isDoubleSided = true
-        plane.firstMaterial?.transparency = SizePanel.alpha
-        
-        
-        let planeNode = SCNNode(geometry: plane)
-        planeNode.renderingOrder = 1000
-        
-        planeNode.eulerAngles.x = -.pi / 2
-        planeNode.eulerAngles.y = -.pi / 2
-        
-        return planeNode
-    }
-    
-    // MARK: - 更新尺寸显示面板
-    private func updateLabelNode(plane: SCNPlane, text: String, alpha: CGFloat = 1.0, rotated: Bool = false) {
-        let width = plane.width
-        let height = plane.height
-        
-        // 这边 * 12000 是为了提高分辨率
-        let size = CGSize(width: width * 2000, height: height * 2000)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        
-        let image = renderer.image { ctx in
-            let rect = CGRect(origin: .zero, size: size)
-            ctx.cgContext.setFillColor(UIColor.white.cgColor)
-            
-            let path = UIBezierPath(roundedRect: rect, cornerRadius: size.height / 2)
-            ctx.cgContext.addPath(path.cgPath)
-            ctx.cgContext.fillPath()
-            
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.alignment = .center
-            
-            let fontSize = size.height * 0.5
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: fontSize, weight: .medium),
-                .foregroundColor: UIColor.black,
-                .paragraphStyle: paragraphStyle
-            ]
-            
-            let textSize = text.size(withAttributes: attributes)
-            let textRect = CGRect(
-                x: (size.width - textSize.width) / 2,
-                y: (size.height - textSize.height) / 2,
-                width: textSize.width,
-                height: textSize.height
-            )
-            
-            // 旋转上下文，使文字旋转 180 度（如果需要）
-            if rotated {
-                ctx.cgContext.translateBy(x: size.width / 2, y: size.height / 2)
-                ctx.cgContext.rotate(by: .pi) // 旋转 180 度
-                ctx.cgContext.translateBy(x: -size.width / 2, y: -size.height / 2)
-            }
-            
-            text.draw(in: textRect, withAttributes: attributes)
-        }
-        
-        plane.firstMaterial?.diffuse.contents = image
-        plane.firstMaterial?.transparency = alpha
+        sizePanel.transform = transform
     }
     
     public func setSizePanelTransparency(_ transparency: CGFloat) {
-        guard let plane = currentSizePanel?.geometry as? SCNPlane else {
-            return
-        }
-        plane.firstMaterial?.transparency = transparency
+        guard let currentSizePanel = currentSizePanel else { return }
+        currentSizePanel.updateTransparency(alpha: transparency)
     }
     
     

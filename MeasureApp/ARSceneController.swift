@@ -707,10 +707,10 @@ extension ARSCNView {
         }
         
         // 2. Create a raycast query for infinite planes.
-        if let query = raycastQuery(from: point, allowing: .existingPlaneInfinite, alignment: .any),
-           let result = session.raycast(query).first {
-            return result
-        }
+//        if let query = raycastQuery(from: point, allowing: .existingPlaneInfinite, alignment: .any),
+//           let result = session.raycast(query).first {
+//            return result
+//        }
         
         // 3. Create a raycast query for estimated horizontal planes.
         if let query = raycastQuery(from: point, allowing: .estimatedPlane, alignment: .horizontal),
